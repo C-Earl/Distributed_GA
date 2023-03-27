@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+service EA {
+  // Request new genes from the server
+  rpc get_genes(get_genes_REQ) returns (get_genes_REP) {}
+
+  // Contribute to the central algorithm
+  rpc return_results(return_results_REQ) returns (EMPTY) {}
+}
+
+message EMPTY {}            // Null return
+
+message get_genes_REQ {
+  string id = 1;            // Node ID
+}
+message get_genes_REP {
+  bytes genes = 1;          // Model parameters
+}
+
+message return_results_REQ {
+  string id = 1;            // Node ID
+  bytes genes = 2;          // Tested genes
+  float fitness = 3;        // Gene fitness
+}
+message return_results_REP {
+  bool success = 4;
+}
