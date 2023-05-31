@@ -8,13 +8,23 @@ import numpy as np
 import datetime
 import sys
 import subprocess
+import hashlib
+
+# Hash consistently across runs (used for gene file names)
+def consistent_hasher(x):
+  # hasher = hashlib.sha256()
+  # hasher.update(x.encode('utf-8'))
+  b = bytes(str(x), 'utf-8')
+  return hashlib.sha256(b).hexdigest()  # Get the hexadecimal representation of the hash value
 
 ###################### GLOBALS ######################
 POOL_DIR = "pool"
 CLIENT_RUNNER = "run_client.sh"
 SERVER_CALLBACK = "run_server.sh"
-GENE_NAME = lambda cid: f"gene_{cid}"   # cid = client id
+# GENE_NAME = lambda cid: f"gene_{cid}"   # cid = client id
+GENE_NAME = lambda gene_key: f"gene_{consistent_hasher(gene_key)}"  # Hash gene for file name
 ###################### GLOBALS ######################
+
 
 ################# HELPER FUNCTIONS ##################
 def write_gene(gene: dict, name: str, run_name: str):
@@ -23,6 +33,7 @@ def write_gene(gene: dict, name: str, run_name: str):
   with open(gene_path, 'wb') as gene_file:
     pickle.dump(gene, gene_file)
 
+
 def load_gene(name: str, run_name: str):
   pool_path = file_path(run_name, POOL_DIR)
   gene_path = file_path(pool_path, name) + ".pkl"
@@ -30,14 +41,51 @@ def load_gene(name: str, run_name: str):
     gene = pickle.load(gene_file)
   return gene
 
-# TODO: Make this more robust
-def get_pool_key(gene: np.array):
-  list_gene = gene.tolist()
-  return tuple(list_gene)
 
+def load_pool(run_name: str):
+  pool = {}
+  pool_path = file_path(run_name, POOL_DIR)
+  for root, dirs, files in os.walk(pool_path):
+    for file in files:
+      gene_path = file_path(pool_path, file)
+      with open(gene_path, 'rb') as gene_file:
+        gene = pickle.load(gene_file)
+        gene_key = get_pool_key(gene['gene'])
+        pool[gene_key] = gene['fitness']
+  return pool
+
+
+# TODO: Make this more robust
+# def get_pool_key(gene: np.array):
+#   list_gene = gene.tolist()
+#   return tuple(list_gene)
+
+# Recursive. Transform np array into nested tuple (for hashing)
+# Assumed all genes are unique
+def get_pool_key(gene: np.array):
+  if gene.ndim == 0:  # Scalar value
+    return gene.item()
+  else:
+    return tuple(get_pool_key(sub_arr) for sub_arr in gene)
+
+# Recursive. Transform nested tuple (pool key) into np array
+# Assumed valid shape for np array
 def get_gene(pool_key: tuple):
-  return np.asarray(pool_key)
-################# HELPER FUNCTIONS ##################
+  # return np.asarray(pool_key)
+  if isinstance(pool_key, tuple):
+    return np.array([get_gene(sub_tup) for sub_tup in pool_key])
+  else:
+    return pool_key
+
+# Normalize values to positive range [0, +inf) (fitnesses)
+# Do nothing if already in range [0, +inf)
+def pos_normalize(values):
+    min_v = min(values)
+    if min_v < 0:
+        return [i + abs(min_v) for i in values]
+    else:
+        return values
+
 
 # TODO: Delete this stuff
 def test_marker(id):
@@ -49,10 +97,15 @@ def client_test_marker(cid, count, gene):
     file.write(str(count))
     file.write(str(gene))
 
+# - Must comply with Algorithms gene structure
 class Model():
-  def run(self, gene):
+  def run(self, gene) -> float:
     # Evaluate gene
-    return sum(np.array([1,2,3,4,5,6,7,8,9,10]) - gene['gene'])
+    # TODO: FOR TESTING
+    fitness = sum([-(i**2) for i in gene['gene']])
+    print(f"Fitness: {fitness}, Model: {np.round(gene['gene'], 3)}")
+    return fitness
+
 
 class Server():
   def __init__(self, run_name: str, model_name: str, num_clients: int, recall: bool = False, **kwargs):
@@ -63,20 +116,21 @@ class Server():
       ### Handle kwarg dtypes here ###
       kwargs['num_genes'] = int(kwargs['num_genes'])
 
-      # Run algorithm, write fitness, get new gene, call client to run new gene
-      client_id = kwargs['client_id']
-
       # TODO: Testing code, delete
       count = int(kwargs['count'])
-      client_test_marker(client_id, count, load_gene(GENE_NAME(client_id), run_name))
-      time.sleep(3)
+      time.sleep(1)
       kwargs['count'] = count+1
 
+      # Call Algorithm to write fitness, get new gene
       alg = Algorithm(run_name, recall=recall, num_clients=num_clients, **kwargs)
       gene = alg.create_gene()
-      write_gene(gene, GENE_NAME(client_id), run_name)     # TODO: Naming
+      gene_name = GENE_NAME(gene['name'])
+      write_gene(gene, gene_name, run_name)
       kwargs.pop('fitness')   # TODO: Figure out more elegant solution
-      self.run_client(**kwargs)   # client_name, gene_name included in kwargs
+
+      # Call client to run new gene
+      kwargs.pop('gene_name')     # Remove old gene name
+      self.run_client(gene_name=gene_name, **kwargs)
       return
 
     # Create base directory
@@ -85,16 +139,17 @@ class Server():
     # Start GA algorithm
     self.alg = Algorithm(self.run_name, **kwargs)
 
-    # Run clients (generate id's)
-    for i in range(num_clients):
-      # TODO: Gene tied to client id, not necessarily
-      self.run_client(client_id=i, gene_name=GENE_NAME(i), **kwargs)
+    # Run clients on new genes
+    pool = self.alg.pool
+    new_gene_keys = pool.keys()
+    # new_genes = [get_gene(k) for k in new_gene_keys]
+    for key in new_gene_keys:
+      self.run_client(gene_name=GENE_NAME(key), **kwargs)
 
   # Recall function
-  def run_client(self, client_id: int, gene_name: str, **kwargs):
+  def run_client(self, gene_name: str, **kwargs):
     ### Necessary kwargs for client run ###
     kwargs['gene_name'] = gene_name
-    kwargs['client_id'] = client_id
     kwargs['run_name'] = self.run_name
     kwargs['call_type'] = "run_client"
 
@@ -104,14 +159,17 @@ class Server():
       bash_args.append(f"--{k}={v}")
 
     # Call client through terminal
-    subprocess.Popen(["python", "GA.py"] + bash_args, shell=True)
+    # subprocess.Popen(["python3", "GA.py"] + bash_args)
     # bash_args = ' '.join(bash_args)
-    # os.system("bash" + f" ./{CLIENT_RUNNER} " + bash_args)
+    os.system(f"python3 GA.py {' '.join([str(i) for i in bash_args])}")
 
 
+# - Handles all gene creation and structure
 class Algorithm():
-  def __init__(self, run_name: str, num_genes: int = 10, recall: bool = False, **kwargs):
+  def __init__(self, run_name: str, gene_shape: tuple, mutation_rate: float, num_genes: int = 10, recall: bool = False, **kwargs):
     self.run_name = run_name
+    self.gene_shape = gene_shape  # TODO: IMPLEMENT THIS
+    self.mutation_rate = mutation_rate  # TODO: IMPLEMENT THIS
     self.num_genes = num_genes
     self.pool_path = file_path(self.run_name, POOL_DIR)
     self.pool = {}
@@ -119,55 +177,86 @@ class Algorithm():
     ### RECALL HANDLING ###
     if recall:
       fitness = kwargs.pop('fitness')   # *Always* pop fitness here
+      tested_gene_name = kwargs.pop('gene_name')
       fitness = float(fitness)
 
-      # Load gene pool so new genes can be created
-      for i in range(num_genes):
-        gene = load_gene(GENE_NAME(i), run_name)
-        if GENE_NAME(i) == GENE_NAME(kwargs['client_id']):  # Add new fitness
-          self.pool[get_pool_key(gene['gene'])] = fitness
-        else:
-          self.pool[get_pool_key(gene['gene'])] = gene['fitness']
-      print(f"POOL (RECALL): {self.pool}")
+      # Load gene pool w/ tested gene
+      self.pool = load_pool(run_name)
+      tested_gene_key = get_pool_key(load_gene(tested_gene_name, run_name)['gene'])
+      self.pool[tested_gene_key] = fitness
+
+      # Update pool in files
+      updated_gene = {'gene': get_gene(tested_gene_key), 'name': tested_gene_key, 'fitness': fitness}
+      write_gene(updated_gene, tested_gene_name, run_name)
+      # print(f"update: {updated_gene}")
+      # print(self.pool)
+
       return
 
     # Generate pool & files
     mkdir(self.pool_path)
     for i in range(num_genes):
       gene = self.create_gene()
-      self.pool[get_pool_key(gene['gene'])] = -1
-      write_gene(gene, GENE_NAME(i), run_name)
-    print(f"POOL (INIT): {self.pool}")
+      gene_key = get_pool_key(gene['gene'])
+      self.pool[gene_key] = None
+      write_gene(gene, GENE_NAME(gene['name']), run_name)   # Write file
 
+  # Gene structure:
+  # {
+  #   'gene' : size 10 array of floats,
+  #   'name' : any hashable type, unique identifier given to gene
+  #   'fitness' : float, fitness of gene (None means untested)
+  # }
   # TODO: Add kwargs
   def create_gene(self):
-    # If pool uninitialized
+
+    # If pool uninitialized, add new untested gene
     if len(self.pool) < self.num_genes:
-      return {'gene': np.random.rand(10), 'name': "", 'fitness': -1}
+      gene = np.random.rand(10)
+      return {'gene': gene, 'name': get_pool_key(gene), 'fitness': None}
 
-    # If untested gene
+    # If untested gene, have it tested first
+    # TODO: Move to new server-call function called "fetch_gene"
+    untested_gene_key = self.untested_genes()
+    if untested_gene_key:
+      return {'gene': get_gene(untested_gene_key), 'name': untested_gene_key, 'fitness': self.pool[untested_gene_key]}
+
+    # Select parents for reproduction
+    sorted_parents = sorted(self.pool.items(), key=lambda gene_kv: gene_kv[1])
+    sorted_parents = [get_gene(gene_key) for gene_key, _ in sorted_parents]
+    fitness_scores = self.pool.values()
+    normed_fitness = pos_normalize(fitness_scores)            # Shift fitness's to [0, +inf)
+    probabilities = normed_fitness / np.sum(normed_fitness)   # Normalize to [0, 1]
+    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)
+    p1, p2 = sorted_parents[p1_i], sorted_parents[p2_i]       # Weighted selection based on fitness
+
+    # Generate offspring with crossover
+    crossover_point = np.random.randint(0, self.gene_shape)
+    child = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
+
+    # Random mutation
+    if np.random.rand() < 0.1:
+      mutation_point = np.random.randint(0, self.gene_shape)
+      child[mutation_point] += np.random.uniform(-self.mutation_rate, +self.mutation_rate)
+
+    return {'gene': child, 'name': get_pool_key(child), 'run_name': self.run_name}
+
+  # Return untested gene if there is one in pool
+  # False otherwise
+  def untested_genes(self):
+    print("UNTESTED GENE")
     for gene_key, fitness in self.pool.items():
-      if fitness < 0:
-        return {'gene': get_gene(gene_key), 'fitness': fitness}
-
-    # Create hybrid based on top 2 genes
-    # print("HYBRID")
-    ordered_genes = sorted(self.pool.items(), key=lambda x: x['fitness'], reverse=True)
-    p1 = ordered_genes[0]['gene']
-    p2 = ordered_genes[1]['gene']
-    crossover_point = np.random.randint(1, len(p1) - 1)
-    offspring_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
-    return offspring_gene
+      if fitness is None:
+        return gene_key
+    return False
 
 
 class Client():
-  def __init__(self, run_name: str, client_id: int, gene_name: str, model, **kwargs):
+  def __init__(self, run_name: str, gene_name: str, model, **kwargs):
     self.run_name = run_name
-    self.client_id = client_id
     self.gene_name = gene_name
     self.model = model
     self.gene = load_gene(gene_name, run_name)
-    print(f"CLIENT RECEIVED GENE: {self.gene}")
 
   def run(self, **kwargs):
     # Run model
@@ -175,8 +264,7 @@ class Client():
 
     # Write fitness (attached to gene)
     self.gene['fitness'] = fitness
-    # print(f"CLIENT GENE: {self.gene}")
-    write_gene(self.gene, gene_name, run_name)
+    write_gene(self.gene, self.gene_name, self.run_name)
 
     # Initiate callback
     self.callback(fitness, **kwargs)
@@ -184,7 +272,6 @@ class Client():
   def callback(self, fitness: int, **kwargs):
     # Convert args/kwargs to bash
     kwargs['gene_name'] = self.gene_name
-    kwargs['client_id'] = self.client_id
     kwargs['run_name'] = self.run_name
     kwargs['fitness'] = fitness
     kwargs['call_type'] = "server_callback"
@@ -195,9 +282,9 @@ class Client():
       bash_args.append(f"--{k}={v}")
 
     # Callback server through terminal
-    subprocess.Popen(["python", "GA.py"] + bash_args, shell=True)
+    # subprocess.Popen(["python3", "GA.py"] + bash_args)
     # bash_args = ' '.join(bash_args)
-    # os.system("bash" + f" ./{SERVER_CALLBACK} " + bash_args)
+    os.system(f"python3 GA.py {' '.join([str(i) for i in bash_args])}")
 
 
 if __name__ == '__main__':
@@ -212,22 +299,28 @@ if __name__ == '__main__':
   # Handle server calling client
   if call_type == "run_client":
     # Pop important params
-    kwargs = all_args
-    gene_name = kwargs.pop('gene_name')
-    client_id = kwargs.pop('client_id')
-    run_name = kwargs.pop('run_name')
+    kwargs_ = all_args
+    gene_name_ = kwargs_.pop('gene_name')    # '_' for avoiding global def conflict
+    run_name_ = kwargs_.pop('run_name')
 
     # Run client
     model = Model()   # TODO: Figure out how to pass models
-    client = Client(run_name, client_id, gene_name, model, **kwargs)
-    client.run(**kwargs)
+    client = Client(run_name_, gene_name_, model, **kwargs_)
+    client.run(**kwargs_)
 
   # Handle client callback to server
   elif call_type == "server_callback":
     # Pop important params
     kwargs = all_args
-    run_name = kwargs.pop('run_name')
-    server = Server(run_name, model_name='placeholder', num_clients=1, recall=True, **kwargs) # TODO: Client num
+    run_name_ = kwargs.pop('run_name')
+    server = Server(run_name_, model_name='placeholder', num_clients=1, recall=True, **kwargs) # TODO: Client num
 
   else:
     print(f"error, improper call_type: {call_type}")
+
+
+    # ordered_genes = sorted(self.pool.items(), key=lambda x: x['fitness'], reverse=True)
+    # p1 = ordered_genes[0]['gene']
+    # p2 = ordered_genes[1]['gene']
+    # crossover_point = np.random.randint(1, len(p1) - 1)
+    # offspring_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
