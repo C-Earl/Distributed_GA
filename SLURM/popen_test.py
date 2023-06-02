@@ -22,19 +22,20 @@ if __name__ == '__main__':
   call_type = all_args.pop('call_type')
 
   if call_type == "run_client":
-    print("Client")
+    # print("Client")
     count = int(all_args['count'])
-    test_marker(0)
-    p = subprocess.Popen([f"python popen_test.py --call_type=run_server --count={count+1}"], shell=True)
+    time.sleep(3)
+    p = subprocess.Popen(["python3", "popen_test.py", "--call_type=server_callback", f"--count={count+1}"])
 
   elif call_type == "server_callback":
-    print("Server")
+    # print("Server")
     bash_args = []
     count = int(all_args['count'])
     bash_args.append(f"--count={count+1}")
     bash_args.append(f"--call_type=run_client")
-    test_marker(0)
-    p = subprocess.Popen(["python", f"./popen_test.py"] + bash_args, shell=True)
+    # test_marker(0)
+    time.sleep(3)
+    p = subprocess.Popen(["python3", "popen_test.py", "--call_type=run_client", f"--count={count}"])
     # for i in range(10):
     #   time.sleep(1)
     #   print(p.stdout)
