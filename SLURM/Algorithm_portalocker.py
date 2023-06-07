@@ -2,7 +2,7 @@ import time
 import ast
 from os import mkdir, rmdir
 from os.path import join as file_path, isdir
-from filelock import FileLock
+import portalocker
 import os
 import argparse
 import pickle
@@ -12,14 +12,14 @@ import subprocess
 import hashlib
 
 POOL_DIR = "pool"
-LOCK_DIR = "locks"
-
+POOL_LOCK_NAME = "POOL_LOCK.lock"
 
 # Write gene to file
 def write_gene(gene: dict, name: str, run_name: str):
-  with FileLock(file_path(run_name) + ".lock"):
-    pool_path = file_path(run_name, POOL_DIR)
-    gene_path = file_path(pool_path, name) + ".pkl"
+  pool_path = file_path(run_name, POOL_DIR)
+  gene_path = file_path(pool_path, name) + ".pkl"
+  pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
+  with portalocker.Lock(pool_lock_path, timeout=1) as _:
     with open(gene_path, 'wb') as gene_file:
       pickle.dump(gene, gene_file)
 
@@ -32,9 +32,10 @@ def write_gene(gene: dict, name: str, run_name: str):
 
 # Load gene from file
 def load_gene(name: str, run_name: str):
-  with FileLock(file_path(run_name) + ".lock"):
-    pool_path = file_path(run_name, POOL_DIR)
-    gene_path = file_path(pool_path, name) + ".pkl"
+  pool_path = file_path(run_name, POOL_DIR)
+  gene_path = file_path(pool_path, name) + ".pkl"
+  pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
+  with portalocker.Lock(pool_lock_path, timeout=1) as _:
     with open(gene_path, 'rb') as gene_file:
       gene = pickle.load(gene_file)
 
@@ -49,9 +50,10 @@ def load_gene(name: str, run_name: str):
 
 # Delete gene file
 def delete_gene(name: str, run_name: str):
-  with FileLock(file_path(run_name) + ".lock"):
-    pool_path = file_path(run_name, POOL_DIR)
-    gene_path = file_path(pool_path, name) + ".pkl"
+  pool_path = file_path(run_name, POOL_DIR)
+  gene_path = file_path(pool_path, name) + ".pkl"
+  pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
+  with portalocker.Lock(pool_lock_path, timeout=1) as _:
     os.remove(gene_path)
 
   # TODO: TEST IF THIS IS NECESSARY ON ALL SYSTEMS
@@ -100,10 +102,11 @@ class Algorithm():
           gene = load_gene(file_name, run_name)
           self.pool[file_name] = gene
         except FileNotFoundError:   # Note: If file deleted during this loop by other client,
-          pass                      # raises this error. Just ignore deleted gene
+          pass                      # raises this error. TODO: Restart fetch
 
   # Behavior: Will add new genes until self.num_genes genes are present. After, new genes
   # created will replace gene with lowest fitness
+  # *This function must be atomic*
   def fetch_gene(self):
     # If pool is unitialized, add new gene (phase 1)
     if len(self.pool.items()) < self.num_genes:
@@ -118,9 +121,13 @@ class Algorithm():
       valid_parents = {gene_key: gene_data for gene_key, gene_data in self.pool.items()  # Filter untested genes
                        if (not gene_data['status'] == 'being tested')}
       worst_gene = min(valid_parents.items(), key=lambda kv: kv[1]['fitness'])[0]
+      try:
+        delete_gene(worst_gene, self.run_name)    # Remove from file dir
+      except FileNotFoundError:
+
+        pass
       del self.pool[worst_gene]                 # Remove from pool obj
       del valid_parents[worst_gene]             # Remove from pool obj
-      delete_gene(worst_gene, self.run_name)    # Remove from file dir
 
       # Create new gene
       new_gene = np.random.rand(10)
