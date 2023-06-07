@@ -1,13 +1,13 @@
 import subprocess
 import pickle
 from os.path import join as file_path
-from filelock import FileLock
+import portalocker
 import sys
 import argparse
 import time
 import numpy as np
 import os
-from Algorithm_portalocker import Algorithm, write_gene
+from Algorithm import Algorithm, write_gene
 from Client import Client
 
 POOL_DIR = "pool"
@@ -16,10 +16,6 @@ TEST_DIR = "test_dir"
 TEST_GENE_NAME = "test_gene"
 CLIENT_RUNNER = "run_client.sh"
 SERVER_CALLBACK = "run_server.sh"
-
-def test_marker(id):
-  with open(f"{id}.txt", 'w') as file:
-    file.write("hi")
 
 
 if __name__ == '__main__':
@@ -31,6 +27,7 @@ if __name__ == '__main__':
   call_type = all_args.pop('call_type')
 
   RUN_NAME = "test_dir"
+  POOL_LOCK_NAME = "POOL_LOCK.lock"
   GENE_SHAPE = 10
   MUTATION_RATE = 0.2
   NUM_GENES = 10
@@ -57,42 +54,32 @@ if __name__ == '__main__':
     gene_data = client.gene_data
     gene_data['fitness'] = fitness
     gene_data['status'] = 'tested'
-    write_gene(gene_data, gene_name, RUN_NAME)
+    pool_lock_path = file_path(RUN_NAME, POOL_LOCK_NAME)
+    with portalocker.Lock(pool_lock_path, timeout=1) as _:
+      write_gene(gene_data, gene_name, RUN_NAME)
+
     count = int(all_args['count'])
+    if count >= 5:
+      sys.exit()
+
     p = subprocess.Popen(["python3", "popen_test.py", "--call_type=server_callback", f"--count={count}"])
 
   elif call_type == "server_callback":
     count = int(all_args['count'])
     count += 1
-    if count >= 5:
-      sys.exit()
 
-    # Start algorithm
-    # TODO: START POOL LOCK HERE
-    # Note: Fitness/status-change already written to file
-    alg = Algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, NUM_GENES)
+    # Lock pool during gene creation
+    pool_lock_path = file_path(RUN_NAME, POOL_LOCK_NAME)
+    with portalocker.Lock(pool_lock_path, timeout=1) as _:
 
-    # Fetch next gene for testing
-    gene_name, _ = alg.fetch_gene()
+      # Init alg (loads gene pool)
+      alg = Algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, NUM_GENES)
+
+      # Fetch next gene for testing
+      gene_name, _ = alg.fetch_gene()
 
     p = subprocess.Popen(["python3", "popen_test.py", "--call_type=run_client", f"--gene_name={gene_name}",
                           f"--count={count}"])
 
   else:
     print(f"error, improper call_type: {call_type}")
-
-
-
-# Init alg (loads gene pool)
-    # run_name = all_args['run_name']
-    # gene_shape = all_args['gene_shape']
-    # mutation_rate = all_args['mutation_rate']
-    # alg = Algorithm(run_name, gene_shape, mutation_rate)
-    #
-    # # Generate gene with alg
-    # new_gene = alg.create_gene()
-    # gene_name = new_gene['name']
-
-    # Send gene to client
-    # p = subprocess.Popen(["python3", "popen_test.py", "--call_type=run_client", f"--count={count}",
-                          # f"--gene_name={gene_name}"])
