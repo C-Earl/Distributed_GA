@@ -39,7 +39,7 @@ if __name__ == '__main__':
       init_genes.append(alg.fetch_gene())
 
     for g_name, _ in init_genes:  # Call 1 client for each gene
-      p = subprocess.Popen(["python3", "popen_test.py", "--call_type=run_client", f"--gene_name={g_name}",
+      p = subprocess.Popen(["python3", "Server.py", "--call_type=run_client", f"--gene_name={g_name}",
                             f"--count={all_args['count']}"])
 
   elif call_type == "run_client":
@@ -58,12 +58,12 @@ if __name__ == '__main__':
       write_gene(gene_data, gene_name, RUN_NAME)
 
     count = int(all_args['count'])
-    p = subprocess.Popen(["python3", "popen_test.py", "--call_type=server_callback", f"--count={count}"])
+    p = subprocess.Popen(["python3", "Server.py", "--call_type=server_callback", f"--count={count}"])
 
   elif call_type == "server_callback":
     count = int(all_args['count'])
     count += 1
-    if count >= 100:
+    if count >= 5:
       sys.exit()
 
     # Lock pool during gene creation
@@ -83,7 +83,7 @@ if __name__ == '__main__':
       else:
         time.sleep(1)
 
-    p = subprocess.Popen(["python3", "popen_test.py", "--call_type=run_client", f"--gene_name={gene_name}",
+    p = subprocess.Popen(["python3", "Server.py", "--call_type=run_client", f"--gene_name={gene_name}",
                           f"--count={count}"])
 
   else:

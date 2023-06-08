@@ -113,7 +113,7 @@ class Algorithm():
       new_gene = np.concatenate((p1_gene[:crossover_point], p2_gene[crossover_point:]))
 
       # Random mutation
-      if np.random.rand() < 0.99:
+      if np.random.rand() < 0.5:
         mutation_point = np.random.randint(0, self.gene_shape)
         new_gene[mutation_point] += np.random.uniform(-self.mutation_rate, +self.mutation_rate)
 

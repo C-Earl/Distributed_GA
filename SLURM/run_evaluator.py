@@ -25,5 +25,3 @@ for gene in gene_progression:
     gene_data = pickle.load(gene_file)
     genes.append(gene_data['gene'])
     fitnesses.append(gene_data['fitness'])
-
-print("hji")

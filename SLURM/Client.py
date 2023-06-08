@@ -57,7 +57,7 @@ if __name__ == '__main__':
   gene_data['status'] = 'tested'
   write_gene(gene_data, gene_name, RUN_NAME)
   count = int(all_args['count'])
-  p = subprocess.Popen(["python3", "popen_test.py", "--call_type=server_callback", f"--count={count}"])
+  p = subprocess.Popen(["python3", "Server.py", "--call_type=server_callback", f"--count={count}"])
 
   # gene_name = '3b119ef98ba88716540f3e053b57afeaee0cc5f4671681d9af6464017929b405'
 
