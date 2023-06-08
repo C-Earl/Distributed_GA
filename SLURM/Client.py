@@ -26,7 +26,10 @@ class Client():
   # Run model
   def run(self):
     gene = self.gene_data['gene']
-    fitness = sum([-(i**2) for i in gene])
+    try:
+      fitness = sum([-(i**2) for i in gene])
+    except TypeError:
+      raise Exception(self.gene_data)
     return fitness
 
 

@@ -43,7 +43,6 @@ if __name__ == '__main__':
                             f"--count={all_args['count']}"])
 
   elif call_type == "run_client":
-    # time.sleep(np.random.rand())
 
     # Run gene
     gene_name = all_args['gene_name']
@@ -55,28 +54,34 @@ if __name__ == '__main__':
     gene_data['fitness'] = fitness
     gene_data['status'] = 'tested'
     pool_lock_path = file_path(RUN_NAME, POOL_LOCK_NAME)
-    with portalocker.Lock(pool_lock_path, timeout=1) as _:
+    with portalocker.Lock(pool_lock_path, timeout=100) as _:
       write_gene(gene_data, gene_name, RUN_NAME)
 
     count = int(all_args['count'])
-    if count >= 5:
-      sys.exit()
-
     p = subprocess.Popen(["python3", "popen_test.py", "--call_type=server_callback", f"--count={count}"])
 
   elif call_type == "server_callback":
     count = int(all_args['count'])
     count += 1
+    if count >= 100:
+      sys.exit()
 
     # Lock pool during gene creation
     pool_lock_path = file_path(RUN_NAME, POOL_LOCK_NAME)
-    with portalocker.Lock(pool_lock_path, timeout=1) as _:
+    while True:
+      with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
-      # Init alg (loads gene pool)
-      alg = Algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, NUM_GENES)
+        # Init alg (loads gene pool)
+        alg = Algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, NUM_GENES)
 
-      # Fetch next gene for testing
-      gene_name, _ = alg.fetch_gene()
+        # Fetch next gene for testing
+        gene_name, success = alg.fetch_gene()
+
+      # Break if fetch was success, otherwise loops
+      if success:
+        break
+      else:
+        time.sleep(1)
 
     p = subprocess.Popen(["python3", "popen_test.py", "--call_type=run_client", f"--gene_name={gene_name}",
                           f"--count={count}"])
