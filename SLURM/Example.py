@@ -1,5 +1,6 @@
 from Algorithm import Algorithm
 from Client import Client
+from Server import Server
 from pool_functions import delete_gene
 import numpy as np
 
@@ -71,4 +72,7 @@ class Simple_GA_Client(Client):
     return fitness
 
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
+  Server(algorithm_path="Example", algorithm_name="Simple_GA",
+         client_path="Example", client_name="Simple_GA_Client",
+         call_type="init", count=0)
