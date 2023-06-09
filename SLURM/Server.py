@@ -1,23 +1,20 @@
 import subprocess
-import pickle
 from os.path import join as file_path
 import portalocker
 import sys
 import argparse
 import time
-import numpy as np
-import os
-from Algorithm import Algorithm, write_gene
-from Client import Client
+from pool_functions import write_gene
+# from Client import Client
+# from Algorithm import Algorithm
+# from pool_functions import write_gene
 
 POOL_DIR = "pool"
 LOCK_DIR = "locks"
 TEST_DIR = "test_dir"
-TEST_GENE_NAME = "test_gene"
-CLIENT_RUNNER = "run_client.sh"
-SERVER_CALLBACK = "run_server.sh"
+POOL_LOCK_NAME = "POOL_LOCK.lock"
 
-
+from Example import Simple_GA as Algorithm, Simple_GA_Client as Client
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   for arg in sys.argv[1:]:    # https://stackoverflow.com/questions/76144372/dynamic-argument-parser-for-python
@@ -27,10 +24,12 @@ if __name__ == '__main__':
   call_type = all_args.pop('call_type')
 
   RUN_NAME = "test_dir"
-  POOL_LOCK_NAME = "POOL_LOCK.lock"
-  GENE_SHAPE = 10
+  GENE_SHAPE = 10         # TODO: SET THESE TO KWARGS
   MUTATION_RATE = 0.2
   NUM_GENES = 10
+
+  # ALG_FILE = all_args['algorithm_file']
+  # CLIENT_FILE = all_args['client_file']
 
   if call_type == "init":
     alg = Algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, num_genes=NUM_GENES)
@@ -63,7 +62,7 @@ if __name__ == '__main__':
   elif call_type == "server_callback":
     count = int(all_args['count'])
     count += 1
-    if count >= 5:
+    if count >= 20:
       sys.exit()
 
     # Lock pool during gene creation

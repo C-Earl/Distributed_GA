@@ -1,21 +1,12 @@
-import time
-import ast
-from os import mkdir, rmdir
-from os.path import join as file_path, isdir
-from filelock import FileLock
-import os
 import argparse
-import pickle
-import numpy as np
 import sys
 import subprocess
-import hashlib
+from abc import abstractmethod
 
 POOL_DIR = "pool"
 LOCK_DIR = "locks"
 
-# TODO: Temporary import, move these to a different independent file
-from Algorithm import write_gene, load_gene   # Shouldn't need deletes
+from pool_functions import write_gene, load_gene
 
 class Client():
   def __init__(self, run_name: str, gene_name: str):
@@ -24,13 +15,9 @@ class Client():
     self.gene_data = load_gene(gene_name, run_name)
 
   # Run model
+  @abstractmethod
   def run(self):
-    gene = self.gene_data['gene']
-    try:
-      fitness = sum([-(i**2) for i in gene])
-    except TypeError:
-      raise Exception(self.gene_data)
-    return fitness
+    pass
 
 
 if __name__ == '__main__':
