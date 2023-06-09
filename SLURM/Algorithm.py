@@ -1,9 +1,6 @@
 from os.path import join as file_path
 import os
-import argparse
 import numpy as np
-import sys
-import subprocess
 import hashlib
 from abc import abstractmethod
 from pool_functions import load_gene, write_gene
@@ -66,30 +63,3 @@ class Algorithm():
 
     # Return gene/file info
     return gene_name
-
-
-if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  for arg in sys.argv[1:]:  # https://stackoverflow.com/questions/76144372/dynamic-argument-parser-for-python
-    if arg.startswith('--'):  # Add dynamic number of args to parser
-      parser.add_argument(arg.split('=')[0])
-  all_args = vars(parser.parse_args())
-  call_type = all_args.pop('call_type')
-
-  RUN_NAME = "test_dir"
-  GENE_SHAPE = 10
-  MUTATION_RATE = 0.2
-  NUM_GENES = 10
-
-  if call_type == "init":
-    alg = Algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, num_genes=NUM_GENES)
-    init_genes = []
-    for i in range(NUM_GENES):     # Generate initial 10 genes
-      init_genes.append(alg.fetch_gene())
-
-    for g_name, _ in init_genes:    # Call 1 client for each gene
-      p = subprocess.Popen(["python3", "Algorithm.py", "--call_type=run", f"--gene_name={g_name}"])
-
-  else:
-    g_name = all_args['gene_name']
-    raise Exception(g_name)

@@ -4,6 +4,7 @@ from Server import Server
 from pool_functions import delete_gene
 import numpy as np
 
+
 class Simple_GA(Algorithm):
 
   def fetch_gene(self):
