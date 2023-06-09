@@ -64,7 +64,7 @@ class Server():
     elif CALL_TYPE == "server_callback":
       count = int(kwargs['count'])
       count += 1
-      if count >= 50:
+      if count >= 25:
         sys.exit()
 
       # Lock pool during gene creation
