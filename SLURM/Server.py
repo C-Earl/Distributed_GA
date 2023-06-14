@@ -9,71 +9,82 @@ from pool_functions import write_gene
 
 POOL_DIR = "pool"
 LOCK_DIR = "locks"
-TEST_DIR = "test_dir"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
-class Server():
-  def __init__(self, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str, **kwargs):
 
-    CALL_TYPE = kwargs.pop('call_type')
-    RUN_NAME = "test_dir"
-    GENE_SHAPE = 10  # TODO: SET THESE TO KWARGS
-    MUTATION_RATE = 0.2
-    NUM_GENES = 10
+def make_bash_args(**kwargs):
+  bash_args = ["python3", "Server.py"]
+  for key, val in kwargs.items():
+    bash_args.append(f"--{key}={val}")
+  return bash_args
+
+
+class Server():
+  def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
+               num_clients: int, call_type: str = 'init', **kwargs):
 
     # Load algorithm and client classes
     algorithm = getattr(__import__(algorithm_path, fromlist=[algorithm_name]), algorithm_name)
     client = getattr(__import__(client_path, fromlist=[client_name]), client_name)
 
-    if CALL_TYPE == "init":
+    # # Generate bash arg string for subprocess call
+    # bash_args = ["python3", "Server.py", f"--run_name={run_name}", f"--algorithm_path={algorithm_path}",
+    #              f"--algorithm_name={algorithm_name}", f"--client_path={client_path}", f"--client_name={client_name}",
+    #              f"--num_clients={num_clients}"]
+    # for key, val in kwargs.items():
+    #   bash_args.append(f"--{key}={val}")
+
+    if call_type == "init":
 
       # Generate initial 10 genes
-      alg = algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, num_genes=NUM_GENES)
+      alg = algorithm(run_name=run_name, **kwargs)
       init_genes = []
-      for i in range(NUM_GENES):
+      for i in range(num_clients):
         init_genes.append(alg.fetch_gene())
 
       # Call 1 client for each gene
+      bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
+                                 client_path=client_path, client_name=client_name, num_clients=num_clients,
+                                 call_type="run_client", **kwargs)
       for g_name, _ in init_genes:
-        p = subprocess.Popen(["python3", "Server.py", "--call_type=run_client", f"--gene_name={g_name}",
-                              f"--algorithm_path={algorithm_path}", f"--algorithm_name={algorithm_name}",
-                              f"--client_path={client_path}", f"--client_name={client_name}",
-                              f"--count={kwargs['count']}"])
+        # bash_args.append(f"--gene_name={g_name}")
+        p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"])
 
-    elif CALL_TYPE == "run_client":
+    elif call_type == "run_client":
 
       # Run gene
       gene_name = kwargs['gene_name']
-      clnt = client(RUN_NAME, gene_name)
+      clnt = client(run_name, gene_name)
       fitness = clnt.run()
 
       # Return fitness (by writing to files)
       gene_data = clnt.gene_data
       gene_data['fitness'] = fitness
       gene_data['status'] = 'tested'
-      pool_lock_path = file_path(RUN_NAME, POOL_LOCK_NAME)
+      pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
-        write_gene(gene_data, gene_name, RUN_NAME)
+        write_gene(gene_data, gene_name, run_name)
 
-      count = int(kwargs['count'])
-      p = subprocess.Popen(["python3", "Server.py", "--call_type=server_callback",
-                            f"--algorithm_path={algorithm_path}", f"--algorithm_name={algorithm_name}",
-                            f"--client_path={client_path}", f"--client_name={client_name}",
-                            f"--count={count}"])
+      # Callback server
+      # kwargs.pop('count')
+      bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
+                                 client_path=client_path, client_name=client_name, num_clients=num_clients,
+                                 call_type="server_callback", **kwargs)
+      p = subprocess.Popen(bash_args)
 
-    elif CALL_TYPE == "server_callback":
-      count = int(kwargs['count'])
+    elif call_type == "server_callback":
+      count = int(kwargs.pop('count'))
       count += 1
-      if count >= 25:
+      if count >= 20:
         sys.exit()
 
       # Lock pool during gene creation
-      pool_lock_path = file_path(RUN_NAME, POOL_LOCK_NAME)
+      pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
       while True:
         with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
           # Init alg (loads gene pool)
-          alg = algorithm(RUN_NAME, GENE_SHAPE, MUTATION_RATE, NUM_GENES)
+          alg = algorithm(run_name=run_name, **kwargs)
 
           # Fetch next gene for testing
           gene_name, success = alg.fetch_gene()
@@ -84,13 +95,15 @@ class Server():
         else:
           time.sleep(1)
 
-      p = subprocess.Popen(["python3", "Server.py", "--call_type=run_client", f"--gene_name={gene_name}",
-                            f"--algorithm_path={algorithm_path}", f"--algorithm_name={algorithm_name}",
-                            f"--client_path={client_path}", f"--client_name={client_name}",
-                            f"--count={count}"])
+      # bash_args.append("--call_type=run_client")
+      # bash_args.append(f"--gene_name={gene_name}")
+      bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
+                                 client_path=client_path, client_name=client_name, num_clients=num_clients,
+                                 count=count, call_type="run_client", gene_name=gene_name, **kwargs)
+      p = subprocess.Popen(bash_args)
 
     else:
-      raise Exception(f"error, improper call_type: {CALL_TYPE}")
+      raise Exception(f"error, improper call_type: {call_type}")
 
 
 # Main function catches server-callbacks & runs clients

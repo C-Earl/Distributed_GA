@@ -7,7 +7,7 @@ import numpy as np
 
 class Simple_GA(Algorithm):
 
-  def fetch_gene(self):
+  def fetch_gene(self, **kwargs):
 
     # Only use tested parents
     valid_parents = {gene_key: gene_data for gene_key, gene_data in self.pool.items()  # Filter untested genes
@@ -74,6 +74,6 @@ class Simple_GA_Client(Client):
 
 
 if __name__ == '__main__':
-  Server(algorithm_path="Example", algorithm_name="Simple_GA",
-         client_path="Example", client_name="Simple_GA_Client",
-         call_type="init", count=0)
+  Server(run_name="test_dir", algorithm_path="Example", algorithm_name="Simple_GA",
+         client_path="Example", client_name="Simple_GA_Client", num_clients=5,
+         gene_shape=10, num_genes=10, mutation_rate=0.1, count=0)

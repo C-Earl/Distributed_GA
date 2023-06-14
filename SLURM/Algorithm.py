@@ -49,7 +49,7 @@ class Algorithm():
   # Behavior: Will add new genes until self.num_genes genes are present. After, new genes
   # created will replace gene with lowest fitness
   @abstractmethod
-  def fetch_gene(self):
+  def fetch_gene(self, **kwargs):
     pass
 
   # Take gene and write it to a file. Returns file name and written data
