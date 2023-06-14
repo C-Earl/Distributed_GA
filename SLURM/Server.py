@@ -27,13 +27,6 @@ class Server():
     algorithm = getattr(__import__(algorithm_path, fromlist=[algorithm_name]), algorithm_name)
     client = getattr(__import__(client_path, fromlist=[client_name]), client_name)
 
-    # # Generate bash arg string for subprocess call
-    # bash_args = ["python3", "Server.py", f"--run_name={run_name}", f"--algorithm_path={algorithm_path}",
-    #              f"--algorithm_name={algorithm_name}", f"--client_path={client_path}", f"--client_name={client_name}",
-    #              f"--num_clients={num_clients}"]
-    # for key, val in kwargs.items():
-    #   bash_args.append(f"--{key}={val}")
-
     if call_type == "init":
 
       # Generate initial 10 genes
@@ -47,7 +40,6 @@ class Server():
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
                                  call_type="run_client", **kwargs)
       for g_name, _ in init_genes:
-        # bash_args.append(f"--gene_name={g_name}")
         p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"])
 
     elif call_type == "run_client":
@@ -75,7 +67,7 @@ class Server():
     elif call_type == "server_callback":
       count = int(kwargs.pop('count'))
       count += 1
-      if count >= 20:
+      if count >= 50:
         sys.exit()
 
       # Lock pool during gene creation
@@ -95,8 +87,8 @@ class Server():
         else:
           time.sleep(1)
 
-      # bash_args.append("--call_type=run_client")
-      # bash_args.append(f"--gene_name={gene_name}")
+      # Remove old gene_name from args, and send new gene to client
+      kwargs.pop('gene_name')
       bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
                                  count=count, call_type="run_client", gene_name=gene_name, **kwargs)
