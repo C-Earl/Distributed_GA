@@ -74,3 +74,5 @@ class Algorithm():
           setattr(self, arg, arg_value)
         else:
           setattr(self, arg, literal_eval(kwargs[arg]))
+      else:
+        raise TypeError(f"Type {t} not supported")

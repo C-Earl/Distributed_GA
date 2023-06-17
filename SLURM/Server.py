@@ -1,5 +1,5 @@
-import pickle
 import subprocess
+import json
 from os.path import join as file_path
 import portalocker
 import sys
@@ -8,6 +8,7 @@ import time
 from pool_functions import write_gene
 
 POOL_DIR = "pool"
+LOG_DIR = "logs"
 LOCK_DIR = "locks"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
@@ -39,8 +40,8 @@ class Server():
       bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
                                  call_type="run_client", **kwargs)
-      for g_name, _ in init_genes:
-        p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"])
+      for i, (g_name, _) in enumerate(init_genes):
+        p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
 
     elif call_type == "run_client":
 
@@ -67,7 +68,7 @@ class Server():
     elif call_type == "server_callback":
       count = int(kwargs.pop('count'))
       count += 1
-      if count >= 50:
+      if count >= 20:
         sys.exit()
 
       # Lock pool during gene creation
@@ -75,11 +76,24 @@ class Server():
       while True:
         with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
+          # TODO: MOVE WRITE FROM CLIENT TO HERE
+          # TODO: IF FETCH FAILS, LAST GENE COULD GET DELETED BY OTHER RETURNING PROCESS!
+
           # Init alg (loads gene pool)
           alg = algorithm(run_name=run_name, **kwargs)
+          old_gene_name = kwargs['gene_name']
+          try:
+            old_gene_data = alg.pool[old_gene_name]
+          except KeyError:
+            raise Exception(old_gene_name, kwargs['client_id'], alg.pool)
 
           # Fetch next gene for testing
           gene_name, success = alg.fetch_gene()
+
+          # Write original gene to logs
+          timestamp = time.strftime('%H:%M:%S', time.localtime())
+          log_data = {'timestamp': timestamp, 'gene_name': old_gene_name, 'gene_data': old_gene_data}
+          self.write_logs(run_name, kwargs['client_id'], log_data)    # Separate logs by client_id
 
         # Break if fetch was success, otherwise loops
         if success:
@@ -97,6 +111,14 @@ class Server():
     else:
       raise Exception(f"error, improper call_type: {call_type}")
 
+  def write_logs(self, run_name: str, log_name: str, log_data: dict):
+
+    # TODO: temporary solution, make this more general
+    log_data['gene_data']['gene'] = log_data['gene_data']['gene'].tolist()
+
+    log_path = file_path(run_name, LOG_DIR, log_name) + ".log"
+    with open(log_path, 'a') as log_file:
+      log_file.write(json.dumps(log_data) + "\n")
 
 # Main function catches server-callbacks & runs clients
 if __name__ == '__main__':
