@@ -9,7 +9,7 @@ class Client():
   def __init__(self, run_name: str, gene_name: str):
     self.run_name = run_name
     self.gene_name = gene_name
-    self.gene_data = load_gene(gene_name, run_name)
+    self.gene_data = load_gene(gene_name, run_name)   # Note: Read should be safe as long as only 1 client runs gene
 
   # Run model
   @abstractmethod
