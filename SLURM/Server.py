@@ -51,18 +51,21 @@ class Server():
       fitness = clnt.run()
 
       # Return fitness (by writing to files)
-      # gene_data = clnt.gene_data
-      # gene_data['fitness'] = fitness
-      # gene_data['status'] = 'tested'
-      # pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
-      # with portalocker.Lock(pool_lock_path, timeout=100) as _:
-      #   write_gene(gene_data, gene_name, run_name)
+      gene_data = clnt.gene_data
+      gene_data['fitness'] = fitness
+      gene_data['status'] = 'tested'
+      pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
+      with portalocker.Lock(pool_lock_path, timeout=100) as _:
+        write_gene(gene_data, gene_name, run_name)
+
+        # Write gene to logs
+        timestamp = time.strftime('%H:%M:%S', time.localtime())
+        log_data = {'timestamp': timestamp, 'gene_name': gene_name, 'gene_data': gene_data}
+        self.write_logs(run_name, kwargs['client_id'], log_data)  # Separate logs by client_id
 
       # Callback server
-      # kwargs.pop('count')
       bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
-                                 fitness=fitness,
                                  call_type="server_callback", **kwargs)
       p = subprocess.Popen(bash_args)
 
@@ -74,34 +77,16 @@ class Server():
 
       # Lock pool during gene creation
       pool_lock_path = file_path(run_name, POOL_LOCK_NAME)
-      fitness = float(kwargs.pop('fitness'))
       while True:
         with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
-          # TODO: MOVE WRITE FROM CLIENT TO HERE
-          # TODO: IF FETCH FAILS, LAST GENE COULD GET DELETED BY OTHER RETURNING PROCESS!
-          # Return fitness (write to files)
-          gene_name = kwargs['gene_name']
-          gene_data = load_gene(gene_name, run_name)
-          gene_data['fitness'] = fitness
-          gene_data['status'] = 'tested'
-          write_gene(gene_data, gene_name, run_name)
-
           # Init alg (loads gene pool)
           alg = algorithm(run_name=run_name, **kwargs)
-          old_gene_name = kwargs['gene_name']
-          try:
-            old_gene_data = alg.pool[old_gene_name]
-          except KeyError:
-            raise Exception(old_gene_name, kwargs['client_id'], alg.pool)
+          # old_gene_name = kwargs['gene_name']
+          # old_gene_data = alg.pool[old_gene_name]
 
           # Fetch next gene for testing
           gene_name, success = alg.fetch_gene()
-
-          # Write original gene to logs
-          timestamp = time.strftime('%H:%M:%S', time.localtime())
-          log_data = {'timestamp': timestamp, 'gene_name': old_gene_name, 'gene_data': old_gene_data}
-          self.write_logs(run_name, kwargs['client_id'], log_data)    # Separate logs by client_id
 
         # Break if fetch was success, otherwise loops
         if success:
