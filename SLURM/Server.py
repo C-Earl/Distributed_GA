@@ -7,12 +7,14 @@ import argparse
 import time
 from pool_functions import write_gene, load_gene
 
+# Constants for filesystem
 POOL_DIR = "pool"
 LOG_DIR = "logs"
 LOCK_DIR = "locks"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
 
+# Generate bash args from kwargs dict
 def make_bash_args(**kwargs):
   bash_args = ["python3", "Server.py"]
   for key, val in kwargs.items():
@@ -20,9 +22,9 @@ def make_bash_args(**kwargs):
   return bash_args
 
 
-class Server():
+class Server:
   def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
-               num_clients: int, call_type: str = 'init', **kwargs):
+               num_clients: int, iterations: int, call_type: str = 'init', **kwargs):
 
     # Load algorithm and client classes
     algorithm = getattr(__import__(algorithm_path, fromlist=[algorithm_name]), algorithm_name)
@@ -36,10 +38,12 @@ class Server():
       for i in range(num_clients):
         init_genes.append(alg.fetch_gene())
 
-      # Call 1 client for each gene
+      # Call 1 client for each gene (and initialize count for iterations)
+      count = 0
       bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
-                                 call_type="run_client", **kwargs)
+                                 iterations=iterations, call_type="run_client",
+                                 count=count, **kwargs)
       for i, (g_name, _) in enumerate(init_genes):
         p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
 
@@ -66,13 +70,14 @@ class Server():
       # Callback server
       bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
-                                 call_type="server_callback", **kwargs)
+                                 iterations=iterations, call_type="server_callback", **kwargs)
       p = subprocess.Popen(bash_args)
 
     elif call_type == "server_callback":
       count = int(kwargs.pop('count'))
+      iterations = int(iterations)    # Comes back as str from bash
       count += 1
-      if count >= 20:
+      if count >= iterations:
         sys.exit()
 
       # Lock pool during gene creation
@@ -82,8 +87,6 @@ class Server():
 
           # Init alg (loads gene pool)
           alg = algorithm(run_name=run_name, **kwargs)
-          # old_gene_name = kwargs['gene_name']
-          # old_gene_data = alg.pool[old_gene_name]
 
           # Fetch next gene for testing
           gene_name, success = alg.fetch_gene()
@@ -98,7 +101,8 @@ class Server():
       kwargs.pop('gene_name')
       bash_args = make_bash_args(run_name=run_name, algorithm_path=algorithm_path, algorithm_name=algorithm_name,
                                  client_path=client_path, client_name=client_name, num_clients=num_clients,
-                                 count=count, call_type="run_client", gene_name=gene_name, **kwargs)
+                                 iterations=iterations, call_type="run_client", gene_name=gene_name,
+                                 count=count, **kwargs)
       p = subprocess.Popen(bash_args)
 
     else:
@@ -112,6 +116,7 @@ class Server():
     log_path = file_path(run_name, LOG_DIR, log_name) + ".log"
     with open(log_path, 'a') as log_file:
       log_file.write(json.dumps(log_data) + "\n")
+
 
 # Main function catches server-callbacks & runs clients
 if __name__ == '__main__':

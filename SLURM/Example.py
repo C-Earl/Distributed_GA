@@ -84,4 +84,4 @@ class Simple_GA_Client(Client):
 if __name__ == '__main__':
   Server(run_name="test_dir", algorithm_path="Example", algorithm_name="Simple_GA",
          client_path="Example", client_name="Simple_GA_Client", num_clients=5,
-         gene_shape=(10,), num_genes=10, mutation_rate=0.1, count=0)
+         gene_shape=(10,), num_genes=10, mutation_rate=0.1, iterations=20)
