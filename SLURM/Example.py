@@ -38,7 +38,7 @@ class Simple_GA(Algorithm):
       sorted_parents = sorted(valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'],
                               reverse=True)  # Sort by fitness
       worst_gene = sorted_parents[-1][0]
-      delete_gene(worst_gene, self.run_name)  # Remove from file dir
+      delete_gene(worst_gene, self.run_name)  # Remove from file dir		# TODO: Remove this, move to serverside
       del self.pool[worst_gene]  # Remove from pool obj
       del valid_parents[worst_gene]  # Remove from pool obj
 

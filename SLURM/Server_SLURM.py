@@ -1,5 +1,5 @@
-import subprocess
-import json
+from os import system as cmd
+from Server import Server
 from os.path import join as file_path
 import portalocker
 import sys
@@ -22,32 +22,13 @@ def make_bash_args(**kwargs):
   return bash_args
 
 
-class Server:
+# TODO: Make inherited from base server class
+# sbatch_script should be sh file preparing environment for model testing; user's responsibility
+class SLURM_Server(Server):
   def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
-               num_clients: int, iterations: int, call_type: str = 'init', **kwargs):
-
-    # Load algorithm and client classes
-    self.algorithm = getattr(__import__(algorithm_path, fromlist=[algorithm_name]), algorithm_name)
-    self.client = getattr(__import__(client_path, fromlist=[client_name]), client_name)
-    self.run_name = run_name
-    self.algorithm_path = algorithm_path
-    self.algorithm_name = algorithm_name
-    self.client_path = client_path
-    self.client_name = client_name
-    self.num_clients = num_clients
-    self.iterations = iterations
-
-    if call_type == "init":
-      self.init(**kwargs)
-
-    elif call_type == "run_client":
-      self.run_client(**kwargs)
-
-    elif call_type == "server_callback":
-      self.server_callback(**kwargs)
-
-    else:
-      raise Exception(f"error, improper call_type: {call_type}")
+               num_clients: int, iterations: int, sbatch_script: str, call_type: str = 'init', **kwargs):
+    self.sbatch_script = sbatch_script
+    super().__init__(run_name, algorithm_path, algorithm_name, client_path, client_name, num_clients, iterations, call_type, **kwargs)
 
   def init(self, **kwargs):
     # Generate initial 10 genes
@@ -63,7 +44,8 @@ class Server:
                                iterations=self.iterations, call_type="run_client",
                                count=count, **kwargs)
     for i, (g_name, _) in enumerate(init_genes):
-      p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
+      # p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
+      cmd(f"sbatch {self.sbatch_script} {' '.join(bash_args)} --gene_name={g_name} --client_id={i}")
 
   def run_client(self, **kwargs):
     # Run gene
@@ -84,12 +66,7 @@ class Server:
       log_data = {'timestamp': timestamp, 'gene_name': gene_name, 'gene_data': gene_data}
       self.write_logs(self.run_name, kwargs['client_id'], log_data)  # Separate logs by client_id
 
-    # Callback server
-    bash_args = make_bash_args(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                               client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
-                               iterations=self.iterations, call_type="server_callback", **kwargs)
-    p = subprocess.Popen(bash_args)
-
+  # "Callback" server (not real server, done on local machine)
   def server_callback(self, **kwargs):
     count = int(kwargs.pop('count'))
     iterations = int(self.iterations)  # Comes back as str from bash
@@ -114,25 +91,16 @@ class Server:
       else:
         time.sleep(1)
 
-    # Remove old gene_name from args, and send new gene to client
+    # Queue next node to test gene
     kwargs.pop('gene_name')
     bash_args = make_bash_args(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
                                client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
                                iterations=iterations, call_type="run_client", gene_name=gene_name,
                                count=count, **kwargs)
-    p = subprocess.Popen(bash_args)
-
-  def write_logs(self, run_name: str, log_name: str, log_data: dict):
-
-    # TODO: temporary solution, make this more general
-    log_data['gene_data']['gene'] = log_data['gene_data']['gene'].tolist()
-
-    log_path = file_path(run_name, LOG_DIR, log_name) + ".log"
-    with open(log_path, 'a') as log_file:
-      log_file.write(json.dumps(log_data) + "\n")
+    cmd(f"sbatch {self.sbatch_script} {' '.join(bash_args)}")
 
 
-# Main function catches server-callbacks & runs clients
+# Main function catches calls from run_server.sh
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   for arg in sys.argv[1:]:    # https://stackoverflow.com/questions/76144372/dynamic-argument-parser-for-python
@@ -141,4 +109,4 @@ if __name__ == '__main__':
   all_args = vars(parser.parse_args())
 
   # Run server protocol with bash kwargs
-  Server(**all_args)
+  SLURM_Server(**all_args)
