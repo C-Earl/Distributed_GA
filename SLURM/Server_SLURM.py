@@ -1,3 +1,4 @@
+import pickle
 from os import system as cmd
 from Server import Server
 from os.path import join as file_path
@@ -11,18 +12,28 @@ from pool_functions import write_gene, load_gene
 POOL_DIR = "pool"
 LOG_DIR = "logs"
 LOCK_DIR = "locks"
+ARGS_FOLDER = "run_args"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
 
 # Generate bash args from kwargs dict
-def make_bash_args(**kwargs):
-  bash_args = ["python3", "Server.py"]
-  for key, val in kwargs.items():
-    bash_args.append(f"--{key}={val}")
-  return bash_args
+# def make_bash_args(**kwargs):
+#   bash_args = ["python3", "Server.py"]
+#   for key, val in kwargs.items():
+#     bash_args.append(f"--{key}={val}")
+#   return bash_args
+
+def write_args_to_file(client_id: int, **kwargs):
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.txt")
+  kwargs['client_id'] = client_id
+  pickle.dump(kwargs, open(args_path, 'wb'))
 
 
-# TODO: Make inherited from base server class
+def load_args_from_file(client_id: int, run_name: str):
+  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.txt")
+  return pickle.load(open(args_path, 'rb'))
+
+
 # sbatch_script should be sh file preparing environment for model testing; user's responsibility
 class SLURM_Server(Server):
   def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
@@ -39,13 +50,14 @@ class SLURM_Server(Server):
 
     # Call 1 client for each gene (and initialize count for iterations)
     count = 0
-    bash_args = make_bash_args(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                               client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
-                               iterations=self.iterations, call_type="run_client",
-                               count=count, **kwargs)
     for i, (g_name, _) in enumerate(init_genes):
       # p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
-      cmd(f"sbatch {self.sbatch_script} {' '.join(bash_args)} --gene_name={g_name} --client_id={i}")
+      # cmd(f"sbatch {self.sbatch_script} {' '.join(bash_args)} --gene_name={g_name} --client_id={i}")
+      write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
+                         client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
+                         iterations=self.iterations, call_type="run_client", count=count,
+                         gene_name=g_name, client_id=i, **kwargs)
+      cmd(f"sbatch {self.sbatch_script} --client_id={i} --run_name={self.run_name}")
 
   def run_client(self, **kwargs):
     # Run gene
@@ -65,6 +77,8 @@ class SLURM_Server(Server):
       timestamp = time.strftime('%H:%M:%S', time.localtime())
       log_data = {'timestamp': timestamp, 'gene_name': gene_name, 'gene_data': gene_data}
       self.write_logs(self.run_name, kwargs['client_id'], log_data)  # Separate logs by client_id
+
+    self.server_callback(**kwargs)
 
   # "Callback" server (not real server, done on local machine)
   def server_callback(self, **kwargs):
@@ -101,12 +115,15 @@ class SLURM_Server(Server):
 
 
 # Main function catches calls from run_server.sh
+# Note: Args (aside from client_id and run_name) loaded via file, NOT bash args
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  for arg in sys.argv[1:]:    # https://stackoverflow.com/questions/76144372/dynamic-argument-parser-for-python
-    if arg.startswith('--'):  # Add dynamic number of args to parser
-      parser.add_argument(arg.split('=')[0])
-  all_args = vars(parser.parse_args())
+  parser.add_argument('--client_id', type=int)
+  parser.add_argument('--run_name', type=str)
+  args = parser.parse_args()
+
+  # Load args from file
+  all_args = load_args_from_file(args.client_id, args.run_name)
 
   # Run server protocol with bash kwargs
   SLURM_Server(**all_args)

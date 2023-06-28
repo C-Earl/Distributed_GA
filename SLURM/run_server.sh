@@ -15,6 +15,7 @@
 
 
 ### Environment Setup ###
+# TODO: Make sure to get requirements for both Server.py and whatever client model needs
 # Activate conda env
 source /cluster/tufts/levinlab/hhazan01/miniconda3/etc/profile.d/conda.sh
 eval "$(conda shell.bash hook)"
@@ -37,7 +38,9 @@ trap 'echo signal recieved!; kill "${PID}"; wait "${PID}"; handler' USR1 SIGINT 
 
 ### Run Model Script (run_client) ###
 # Will lead to server callback & re-queuing of node
-python3 "Server_SLURM.py" "$@" &    # Run server script with all runtime args
+# Note: args expected in order
+python3 Server_SLURM.py --client_id=$1 --run_name=$2
+
 #echo "Job started!"
 #PID="$!"
 #wait "${PID}"
