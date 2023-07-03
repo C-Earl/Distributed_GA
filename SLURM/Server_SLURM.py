@@ -24,13 +24,13 @@ POOL_LOCK_NAME = "POOL_LOCK.lock"
 #   return bash_args
 
 def write_args_to_file(client_id: int, **kwargs):
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.txt")
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.pkl")
   kwargs['client_id'] = client_id
   pickle.dump(kwargs, open(args_path, 'wb'))
 
 
 def load_args_from_file(client_id: int, run_name: str):
-  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.txt")
+  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.pkl")
   return pickle.load(open(args_path, 'rb'))
 
 
@@ -52,11 +52,10 @@ class SLURM_Server(Server):
     count = 0
     for i, (g_name, _) in enumerate(init_genes):
       # p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
-      # cmd(f"sbatch {self.sbatch_script} {' '.join(bash_args)} --gene_name={g_name} --client_id={i}")
-      write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                         client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
-                         iterations=self.iterations, call_type="run_client", count=count,
-                         gene_name=g_name, client_id=i, **kwargs)
+      write_args_to_file(client_id=i, gene_name=g_name, run_name=self.run_name, algorithm_path=self.algorithm_path,
+                         algorithm_name=self.algorithm_name, client_path=self.client_path, client_name=self.client_name,
+                         num_clients=self.num_clients, iterations=self.iterations, sbatch_script=self.sbatch_script,
+                         call_type="run_client", count=count, **kwargs)
       cmd(f"sbatch {self.sbatch_script} --client_id={i} --run_name={self.run_name}")
 
   def run_client(self, **kwargs):
@@ -82,8 +81,8 @@ class SLURM_Server(Server):
 
   # "Callback" server (not real server, done on local machine)
   def server_callback(self, **kwargs):
-    count = int(kwargs.pop('count'))
-    iterations = int(self.iterations)  # Comes back as str from bash
+    count = kwargs.pop('count')
+    iterations = self.iterations
     count += 1
     if count >= iterations:
       sys.exit()
@@ -107,11 +106,11 @@ class SLURM_Server(Server):
 
     # Queue next node to test gene
     kwargs.pop('gene_name')
-    bash_args = make_bash_args(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                               client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
-                               iterations=iterations, call_type="run_client", gene_name=gene_name,
-                               count=count, **kwargs)
-    cmd(f"sbatch {self.sbatch_script} {' '.join(bash_args)}")
+    write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
+                       client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
+                       iterations=iterations, call_type="run_client", gene_name=gene_name, sbatch_script=self.sbatch_script,
+                       count=count, **kwargs)
+    cmd(f"sbatch {self.sbatch_script} --client_id={kwargs['client_id']} --run_name={self.run_name}")
 
 
 # Main function catches calls from run_server.sh
