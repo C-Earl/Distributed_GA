@@ -1,7 +1,7 @@
-from SLURM.Algorithm import Algorithm
-from SLURM.Client import Client
-from SLURM.Server import Server
-from SLURM.pool_functions import delete_gene
+from Algorithm import Algorithm
+from Client import Client
+from Server_SLURM import SLURM_Server as Server
+from pool_functions import delete_gene
 import numpy as np
 
 
