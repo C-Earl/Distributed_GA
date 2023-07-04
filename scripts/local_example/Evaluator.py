@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from pool_functions import load_gene
+from SLURM.pool_functions import load_gene
 from os.path import join as file_path
 
 POOL_DIR = "pool"
@@ -30,6 +30,6 @@ if __name__ == '__main__':
   if len(all_args.items()) == 0:
 
     ### Manual Inputs ###
-    all_args['run_name'] = "test_dir"
+    all_args['run_name'] = "example_run_name"
 
   main(**all_args)

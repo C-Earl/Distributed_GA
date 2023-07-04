@@ -1,3 +1,4 @@
+import os.path
 import subprocess
 import json
 import pickle
@@ -6,12 +7,11 @@ import portalocker
 import sys
 import argparse
 import time
-from pool_functions import write_gene, load_gene
+from SLURM.pool_functions import write_gene
 
 # Constants for filesystem
 POOL_DIR = "pool"
 LOG_DIR = "logs"
-LOCK_DIR = "locks"
 ARGS_FOLDER = "run_args"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
@@ -62,6 +62,12 @@ class Server:
       raise Exception(f"error, improper call_type: {call_type}")
 
   def init(self, **kwargs):
+    # Make directory if needed
+    # Note: CWD will be at where user-written script is
+    os.makedirs(file_path(self.out_path, self.run_name, POOL_DIR), exist_ok=True)
+    os.makedirs(file_path(self.out_path, self.run_name, LOG_DIR), exist_ok=True)
+    os.makedirs(file_path(self.out_path, self.run_name, ARGS_FOLDER), exist_ok=True)
+
     # Generate initial 10 genes
     alg = self.algorithm(run_name=self.run_name, **kwargs)
     init_genes = []

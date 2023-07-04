@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from pool_functions import load_gene
+from SLURM.pool_functions import load_gene
 
 POOL_DIR = "pool"
 LOCK_DIR = "locks"
