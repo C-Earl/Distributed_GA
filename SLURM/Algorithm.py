@@ -64,6 +64,10 @@ class Algorithm():
     # Return gene/file info
     return gene_name
 
+  # Remove gene from pool (in files)
+  def delete_gene(self, gene_name: str):
+    delete_gene(gene_name, self.run_name)
+
   # Create class vars with proper typing
   # Note: bash args always returned as strings
   def make_class_vars(self, typing: dict, **kwargs):

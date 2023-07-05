@@ -48,6 +48,7 @@ class Server:
     self.client_name = client_name
     self.num_clients = num_clients
     self.iterations = iterations
+    self.server_file_path = os.path.dirname(os.path.realpath(__file__)) + "/Server.py"  # Note: CWD not the same as SLURM folder
 
     if call_type == "init":
       self.init(**kwargs)
@@ -64,9 +65,9 @@ class Server:
   def init(self, **kwargs):
     # Make directory if needed
     # Note: CWD will be at where user-written script is
-    os.makedirs(file_path(self.out_path, self.run_name, POOL_DIR), exist_ok=True)
-    os.makedirs(file_path(self.out_path, self.run_name, LOG_DIR), exist_ok=True)
-    os.makedirs(file_path(self.out_path, self.run_name, ARGS_FOLDER), exist_ok=True)
+    os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
+    os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
+    os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
 
     # Generate initial 10 genes
     alg = self.algorithm(run_name=self.run_name, **kwargs)
@@ -81,7 +82,7 @@ class Server:
                          algorithm_name=self.algorithm_name, client_path=self.client_path, client_name=self.client_name,
                          num_clients=self.num_clients, iterations=self.iterations, call_type="run_client",
                          count=count, **kwargs)
-      p = subprocess.Popen(["python3", "Server.py", f"--run_name={self.run_name}", f"--client_id={i}"])
+      p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={i}"])
 
   def run_client(self, **kwargs):
     # Run gene
@@ -106,7 +107,7 @@ class Server:
     write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
                        client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
                        iterations=self.iterations, call_type="server_callback", **kwargs)
-    p = subprocess.Popen(["python3", "Server.py", f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
+    p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
 
   def server_callback(self, **kwargs):
     count = kwargs.pop('count')
@@ -138,7 +139,7 @@ class Server:
                        client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
                        iterations=iterations, call_type="run_client", gene_name=gene_name,
                        count=count, **kwargs)
-    p = subprocess.Popen(["python3", "Server.py", f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
+    p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
 
   def write_logs(self, run_name: str, log_name: int, log_data: dict):
 

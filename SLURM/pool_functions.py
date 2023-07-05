@@ -22,8 +22,8 @@ def load_gene(name: str, run_name: str):
 
 
 # Delete gene file
-def delete_gene(name: str, out_path: str, run_name: str):
-  pool_path = file_path(out_path, run_name, POOL_DIR)
+def delete_gene(name: str, run_name: str):
+  pool_path = file_path(run_name, POOL_DIR)
   gene_path = file_path(pool_path, name) + ".pkl"
   os.remove(gene_path)
   return True
