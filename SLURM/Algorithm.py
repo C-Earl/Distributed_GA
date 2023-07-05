@@ -33,9 +33,9 @@ def get_pool_key(gene: np.array):
 # Assumed that pool is locked for duration of objects existence
 class Algorithm():
 
-  def __init__(self, typing: dict, run_name: str, **kwargs):
+  def __init__(self, run_name: str, **kwargs):
     self.run_name = run_name
-    self.make_class_vars(typing, **kwargs)
+    self.make_class_vars(**kwargs)
     self.pool_path = file_path(self.run_name, POOL_DIR)
     self.pool = {}
 
@@ -70,13 +70,15 @@ class Algorithm():
 
   # Create class vars with proper typing
   # Note: bash args always returned as strings
-  def make_class_vars(self, typing: dict, **kwargs):
-    for arg, t in typing.items():
-      if t in (bytes, float, int, tuple, list, dict, set, bool):
-        arg_value = kwargs[arg]
-        if t == type(arg_value):
-          setattr(self, arg, arg_value)
-        else:
-          setattr(self, arg, literal_eval(kwargs[arg]))
-      else:
-        raise TypeError(f"Type {t} not supported")
+  def make_class_vars(self, **kwargs):
+    for arg, arg_value in kwargs.items():
+      setattr(self, arg, arg_value)
+    # for arg, t in typing.items():
+    #   if t in (bytes, float, int, tuple, list, dict, set, bool):
+    #     arg_value = kwargs[arg]
+    #     if t == type(arg_value):
+    #       setattr(self, arg, arg_value)
+    #     else:
+    #       setattr(self, arg, literal_eval(kwargs[arg]))
+    #   else:
+    #     raise TypeError(f"Type {t} not supported")
