@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from SLURM.pool_functions import load_gene
+from DGA.pool_functions import load_gene
 from os.path import join as file_path
 
 POOL_DIR = "pool"

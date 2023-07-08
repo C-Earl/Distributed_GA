@@ -1,12 +1,12 @@
 import pickle
 from os import system as cmd
-from Server import Server
+from DGA.Server import Server
 from os.path import join as file_path
 import portalocker
 import sys
 import argparse
 import time
-from pool_functions import write_gene, load_gene
+from DGA.pool_functions import write_gene, load_gene
 
 # Constants for filesystem
 POOL_DIR = "pool"

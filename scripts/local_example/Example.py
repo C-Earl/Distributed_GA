@@ -1,7 +1,6 @@
-import sys; print(sys.path)
-from SLURM.Algorithm import Algorithm
-from SLURM.Client import Client
-from SLURM.Server import Server
+from DGA.Algorithm import Algorithm
+from DGA.Client import Client
+from DGA.Server import Server
 import numpy as np
 
 # # # # # # # # # # # # # # # # # # # # #

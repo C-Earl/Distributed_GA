@@ -7,7 +7,7 @@ import portalocker
 import sys
 import argparse
 import time
-from SLURM.pool_functions import write_gene
+from DGA.pool_functions import write_gene
 
 # Constants for filesystem
 POOL_DIR = "pool"

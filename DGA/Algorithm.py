@@ -3,7 +3,7 @@ import os
 import numpy as np
 import hashlib
 from abc import abstractmethod
-from SLURM.pool_functions import load_gene, write_gene, delete_gene
+from DGA.pool_functions import load_gene, write_gene, delete_gene
 from ast import literal_eval
 
 POOL_DIR = "pool"
