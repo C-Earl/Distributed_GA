@@ -38,9 +38,15 @@ class Server:
   def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
                num_clients: int, iterations: int, call_type: str = 'init', **kwargs):
 
+    # Add path for algorithm and client to sys.path
+    sys.path.append('/'.join(algorithm_path.split('/')[0:-1]))
+    sys.path.append('/'.join(client_path.split('/')[0:-1]))
+    alg_module_name = algorithm_path.split('/')[-1][0:-3]
+    client_module_name = algorithm_path.split('/')[-1][0:-3]
+
     # Load algorithm and client classes
-    self.algorithm = getattr(__import__(algorithm_path, fromlist=[algorithm_name]), algorithm_name)
-    self.client = getattr(__import__(client_path, fromlist=[client_name]), client_name)
+    self.algorithm = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name)
+    self.client = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name)
     self.run_name = run_name
     self.algorithm_path = algorithm_path
     self.algorithm_name = algorithm_name

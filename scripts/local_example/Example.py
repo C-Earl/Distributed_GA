@@ -1,3 +1,4 @@
+import sys; print(sys.path)
 from SLURM.Algorithm import Algorithm
 from SLURM.Client import Client
 from SLURM.Server import Server
@@ -88,8 +89,12 @@ class Simple_GA_Client(Client):
 
 
 if __name__ == '__main__':
-  Server(run_name="example_run_name", out_path="../../run_outputs",
-         algorithm_path="Example", algorithm_name="Simple_GA",
-         client_path="Example", client_name="Simple_GA_Client",
+  import os
+  alg_path = os.path.abspath(__file__)
+  client_path = os.path.abspath(__file__)
+
+  Server(run_name="example_run_name",
+         algorithm_path="/mnt/8226ec47-eb66-49bb-a7b7-9f0c1edc7a8c/School/Distributed_GA/scripts/local_example/Example.py", algorithm_name="Simple_GA",
+         client_path="/mnt/8226ec47-eb66-49bb-a7b7-9f0c1edc7a8c/School/Distributed_GA/scripts/local_example/Example.py", client_name="Simple_GA_Client",
          num_clients=5, gene_shape=(10,), num_genes=10, mutation_rate=0.1,
          iterations=20, sbatch_script="run_server.sh")
