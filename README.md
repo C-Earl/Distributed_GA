@@ -18,17 +18,16 @@ Your performance will be higher if you have more cores. While you can set as man
 
 # Installation
 1. Clone repository
-2. Navigate to the base directory ```./Distributed_GA```
-3. Install packages in ```requirements.txt``` using the command ```pip install -r requirements.txt```
+2. Create a virtual environment for the project. It's reccomended to use VScode to do this for simplicity. Simply press ```ctrl+shift+P```, search for "Create Environment" and select "Python: Create Environment". In order, select 'venv', a 3.11+ Python interpreter, and ensure that requirements.txt is checked before hitting OK. 
 
 NOTE: If you are NOT using VSCode, now is the time to set your PYTYHONPATH to ```./Distributed_GA```
 
 # How to run example
 This example will show you how to run a distributed genetic algorithm on your local machine using DGA module. The example script works by calling asynchronous subprocesses to test a very basic model. 
 
-Navigate to ```./Distributed_GA/scripts/local_example/Example.py``` and open in VScode. To run Example.py, use the run button on the IDE. Alternatively, you can navigate to the same location in the VScode terminal and run ```python3 Example.py```. 
+Using VScode, navigate to ```./Distributed_GA/scripts/local_example/Example.py``` To run Example.py, simply use the run button on the IDE. Alternatively, you can navigate to the same location in the VScode terminal and run ```python3 Example.py```.
 
-To tell if the genetic algorithm has finished running, check your process manager. While it's running, you should see 5 Python processes. These are the parallel processes testing the example model, and will 'reproduce' (create new gene & call new process to test it) until the max iterations. **You will know the run has finished when all the Python processes have disappeared from your process manager.**
+To tell if the genetic algorithm has finished running, check your process manager. While the algorithm is running, you should see 5 Python processes in your manager. These are the parallel processes testing the example model, and will 'reproduce' (create new gene & call new process to test it) until the max iterations. **You will know the run has finished when all the Python processes have disappeared from your process manager.**
 
 Soon after you start, you should see a new directory called ```example_run_name```. This is where all the data (genes, fitnesses, etc.) are stored. To see the result of your run, run the ```Evaluate.py``` file next to ```Example.py```. This will print the current state of the gene pool (should be 10 genes). Outputs should look something like this:
 ```bash
@@ -118,7 +117,7 @@ class My_Client(Client):
 		return fitness
 ```
 
-4. The final step is to make the file runnable. To do this, add the following to the very bottom of your file, and fill in the empty arguments:
+4. The final step is to make the file runnable. To do this, add the following to the very bottom of your file, and fill in the missing arguments:
 ```Python
 if __name__ == '__main__':
   import os
@@ -148,9 +147,9 @@ if __name__ == '__main__':
 * ```num_genes (int)``` = max # of genes stored in gene pool 
 * ```iterations (int)``` = how many genes each parallel processor will test. Total genes tested is ```iterations * num_parallel_processes```
 
-5. You should now be able to run your file. See the 'how to run example' section on how to tell when the algorithm has finished running. Again, it is reccomended to use VScode since the repository is preconfigured for it.
+5. You should now be able to run your file, just like Example.py. See the 'how to run example' section on how to tell when the algorithm has finished running. Again, it is reccomended to use VScode since the repository is preconfigured for it.
 
-6. To see the results of your run, copy Evaluate.py to your project folder and at the bottom change this line to reflect your own ```run_name```
+6. To see the results of your run, copy Evaluate.py to your project folder and at the bottom change this line to reflect your own ```run_name``` (This is a WIP)
 
 ```python
 ...	# This is at the bottom of Evaluate.py

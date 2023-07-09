@@ -31,6 +31,7 @@ class Simple_GA_Client(Client):			# <--- Remember to inherit Client class
     fitness = sum([-(i**2) for i in gene])
     return fitness
 
+
 class Simple_GA(Algorithm):
 
   def fetch_gene(self, **kwargs):
