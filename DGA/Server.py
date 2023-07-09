@@ -36,11 +36,17 @@ def load_args_from_file(client_id: int, run_name: str):
 
 class Server:
   def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
-               num_clients: int, iterations: int, call_type: str = 'init', **kwargs):
-
-    # Add path for algorithm and client to sys.path
+               num_parallel_processes: int, iterations: int, call_type: str = 'init', **kwargs):
     sys.path.append('/'.join(algorithm_path.split('/')[0:-1]))
     sys.path.append('/'.join(client_path.split('/')[0:-1]))
+
+    # Add path for algorithm and client to sys.path
+    server_path = os.path.abspath(__file__)               # Get absolute path to current location on machine
+    base_path = '/'.join(server_path.split('/')[0:-2])    # Get path to "./Distributed_GA" ie. base folder
+    full_alg_path = file_path(base_path, '/'.join(algorithm_path.split('/')[0:-1]))     # Prepend to path stub passed by user script
+    full_client_path = file_path(base_path, '/'.join(client_path.split('/')[0:-1]))
+    sys.path.append(full_alg_path)
+    sys.path.append(full_client_path)
     alg_module_name = algorithm_path.split('/')[-1][0:-3]
     client_module_name = algorithm_path.split('/')[-1][0:-3]
 
@@ -52,9 +58,9 @@ class Server:
     self.algorithm_name = algorithm_name
     self.client_path = client_path
     self.client_name = client_name
-    self.num_clients = num_clients
+    self.num_parallel_processes = num_parallel_processes
     self.iterations = iterations
-    self.server_file_path = os.path.dirname(os.path.realpath(__file__)) + "/Server.py"  # Note: CWD not the same as SLURM folder
+    self.server_file_path = server_path  # Note: CWD not the same as DGA folder
 
     if call_type == "init":
       self.init(**kwargs)
@@ -78,7 +84,7 @@ class Server:
     # Generate initial 10 genes
     alg = self.algorithm(run_name=self.run_name, **kwargs)
     init_genes = []
-    for i in range(self.num_clients):
+    for i in range(self.num_parallel_processes):
       init_genes.append(alg.fetch_gene())
 
     # Call 1 client for each gene (and initialize count for iterations)
@@ -86,7 +92,7 @@ class Server:
     for i, (g_name, _) in enumerate(init_genes):
       write_args_to_file(client_id=i, gene_name=g_name, run_name=self.run_name, algorithm_path=self.algorithm_path,
                          algorithm_name=self.algorithm_name, client_path=self.client_path, client_name=self.client_name,
-                         num_clients=self.num_clients, iterations=self.iterations, call_type="run_client",
+                         num_parallel_processes=self.num_parallel_processes, iterations=self.iterations, call_type="run_client",
                          count=count, **kwargs)
       p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={i}"])
 
@@ -111,7 +117,7 @@ class Server:
 
     # Callback server
     write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                       client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
+                       client_path=self.client_path, client_name=self.client_name, num_parallel_processes=self.num_parallel_processes,
                        iterations=self.iterations, call_type="server_callback", **kwargs)
     p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
 
@@ -142,7 +148,7 @@ class Server:
     # Remove old gene_name from args, and send new gene to client
     kwargs.pop('gene_name')
     write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                       client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
+                       client_path=self.client_path, client_name=self.client_name, num_parallel_processes=self.num_parallel_processes,
                        iterations=iterations, call_type="run_client", gene_name=gene_name,
                        count=count, **kwargs)
     p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])

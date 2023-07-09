@@ -4,22 +4,34 @@ from DGA.Server import Server
 import numpy as np
 
 # # # # # # # # # # # # # # # # # # # # #
-# SEE README.md FIRST                   #
-#                                       #
-# Steps to make custom genetic alg      #
-# - Inherit Algorithm obj for class     #
-# - Follow constructor format           #
-# - Override fetch_gene()               #
+# SEE README.md                   			
+#          
+# Steps to test your own models:
+# 1. Create new class that inherits Client class
+# 2. Implement run method which runs model and returns fitness value. This is where you can setup your AI-gym, Torch,
+#    Tensorflow, etc. models and environments for fitness testing. (details below)
+#                              
+# Steps to create custom algorithms:			
+# 1. Create the class, and inherit the Algorithm object  
+# 2. Implement the fetch_gene method which handles the creation of new genes (more below)
+# 3. Implement the test_gene method which handles the testing of genes
 # # # # # # # # # # # # # # # # # # # # #
-class Simple_GA(Algorithm):
 
-  # def __init__(self, **kwargs):
-  #   typing = {
-  #     'gene_shape': tuple,
-  #     'mutation_rate': float,
-  #     'num_genes': int
-  #   }
-  #   super().__init__(typing, **kwargs)
+class Simple_GA_Client(Client):			# <--- Remember to inherit Client class
+
+	# Description: 
+  # The function called to test your model. Only requirement is that it returns a float value representing fitness.
+	# Gene data is stored in self.gene_data, which is a dictionary with the following keys:
+	#   'gene': The gene itself, which is a numpy array
+	#   'fitness': The fitness of the gene, which is a float
+	#   'status': The status of the gene, which is a string
+	#   'time': The time the gene was created, which is a float
+  def run(self) -> float:
+    gene = self.gene_data['gene']
+    fitness = sum([-(i**2) for i in gene])
+    return fitness
+
+class Simple_GA(Algorithm):
 
   def fetch_gene(self, **kwargs):
 
@@ -78,22 +90,13 @@ class Simple_GA(Algorithm):
       return values
 
 
-class Simple_GA_Client(Client):
-
-  # Runs model. fitness = sum of squared differences of gene values from 0
-  def run(self):
-    gene = self.gene_data['gene']
-    fitness = sum([-(i**2) for i in gene])
-    return fitness
-
-
 if __name__ == '__main__':
   import os
   alg_path = os.path.abspath(__file__)
   client_path = os.path.abspath(__file__)
 
   Server(run_name="example_run_name",
-         algorithm_path="/mnt/8226ec47-eb66-49bb-a7b7-9f0c1edc7a8c/School/Distributed_GA/scripts/local_example/Example.py", algorithm_name="Simple_GA",
-         client_path="/mnt/8226ec47-eb66-49bb-a7b7-9f0c1edc7a8c/School/Distributed_GA/scripts/local_example/Example.py", client_name="Simple_GA_Client",
-         num_clients=5, gene_shape=(10,), num_genes=10, mutation_rate=0.1,
+         algorithm_path="scripts/local_example/Example.py", algorithm_name="Simple_GA",
+         client_path="scripts/local_example/Example.py", client_name="Simple_GA_Client",
+         num_parallel_processes=5, gene_shape=(10,), num_genes=10, mutation_rate=0.1,
          iterations=20, sbatch_script="run_server.sh")

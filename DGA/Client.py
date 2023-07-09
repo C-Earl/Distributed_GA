@@ -13,5 +13,5 @@ class Client():
 
   # Run model
   @abstractmethod
-  def run(self):
+  def run(self) -> float:
     pass

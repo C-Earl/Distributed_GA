@@ -45,7 +45,7 @@ class SLURM_Server(Server):
     # Generate initial 10 genes
     alg = self.algorithm(run_name=self.run_name, **kwargs)
     init_genes = []
-    for i in range(self.num_clients):
+    for i in range(self.num_parallel_processes):
       init_genes.append(alg.fetch_gene())
 
     # Call 1 client for each gene (and initialize count for iterations)
@@ -54,7 +54,7 @@ class SLURM_Server(Server):
       # p = subprocess.Popen(bash_args + [f"--gene_name={g_name}"] + [f"--client_id={i}"])
       write_args_to_file(client_id=i, gene_name=g_name, run_name=self.run_name, algorithm_path=self.algorithm_path,
                          algorithm_name=self.algorithm_name, client_path=self.client_path, client_name=self.client_name,
-                         num_clients=self.num_clients, iterations=self.iterations, sbatch_script=self.sbatch_script,
+                         num_clients=self.num_parallel_processes, iterations=self.iterations, sbatch_script=self.sbatch_script,
                          call_type="run_client", count=count, **kwargs)
       cmd(f"sbatch {self.sbatch_script} --client_id={i} --run_name={self.run_name}")
 
@@ -107,7 +107,7 @@ class SLURM_Server(Server):
     # Queue next node to test gene
     kwargs.pop('gene_name')
     write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                       client_path=self.client_path, client_name=self.client_name, num_clients=self.num_clients,
+                       client_path=self.client_path, client_name=self.client_name, num_clients=self.num_parallel_processes,
                        iterations=iterations, call_type="run_client", gene_name=gene_name, sbatch_script=self.sbatch_script,
                        count=count, **kwargs)
     cmd(f"sbatch {self.sbatch_script} --client_id={kwargs['client_id']} --run_name={self.run_name}")
