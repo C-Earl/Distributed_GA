@@ -94,7 +94,7 @@ class Server:
                          algorithm_name=self.algorithm_name, client_path=self.client_path, client_name=self.client_name,
                          num_parallel_processes=self.num_parallel_processes, iterations=self.iterations, call_type="run_client",
                          count=count, **kwargs)
-      p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={i}"])
+      p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={i}"], shell=True)
 
   def run_client(self, **kwargs):
     # Run gene
@@ -119,7 +119,7 @@ class Server:
     write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
                        client_path=self.client_path, client_name=self.client_name, num_parallel_processes=self.num_parallel_processes,
                        iterations=self.iterations, call_type="server_callback", **kwargs)
-    p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
+    p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"], shell=True)
 
   def server_callback(self, **kwargs):
     count = kwargs.pop('count')
@@ -151,7 +151,7 @@ class Server:
                        client_path=self.client_path, client_name=self.client_name, num_parallel_processes=self.num_parallel_processes,
                        iterations=iterations, call_type="run_client", gene_name=gene_name,
                        count=count, **kwargs)
-    p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"])
+    p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"], shell=True)
 
   def write_logs(self, run_name: str, log_name: int, log_data: dict):
 
