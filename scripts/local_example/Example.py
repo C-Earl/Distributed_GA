@@ -19,13 +19,13 @@ import numpy as np
 
 class Simple_GA_Client(Client):			# <--- Remember to inherit Client class
 
-	# Description: 
+  # Description:
   # The function called to test your model. Only requirement is that it returns a float value representing fitness.
-	# Gene data is stored in self.gene_data, which is a dictionary with the following keys:
-	#   'gene': The gene itself, which is a numpy array
-	#   'fitness': The fitness of the gene, which is a float
-	#   'status': The status of the gene, which is a string
-	#   'time': The time the gene was created, which is a float
+  # Gene data is stored in self.gene_data, which is a dictionary with the following keys:
+  #   'gene': The gene itself, which is a numpy array
+  #   'fitness': The fitness of the gene, which is a float
+  #   'status': The status of the gene, which is a string
+  #   'time': The time the gene was created, which is a float
   def run(self) -> float:
     gene = self.gene_data['gene']
     fitness = sum([-(i**2) for i in gene])

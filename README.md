@@ -33,6 +33,7 @@ Soon after you start, you should see a new directory called ```example_run_name`
 ```bash
 Gene: fc4843f1f6...             Fitness: -0.8420308346282214		# gene name is hashed gene
 ```
+**Note**: You can run the file again, and it will continue the genetic algorithm from where it left off. This will work with *any* model that you implement.
 
 # How to run your own models on the base algorithm
 Limitations:

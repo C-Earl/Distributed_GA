@@ -15,14 +15,6 @@ LOG_DIR = "logs"
 ARGS_FOLDER = "run_args"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
-
-# # Generate bash args from kwargs dict
-# def make_bash_args(**kwargs):
-#   bash_args = ["python3", "Server.py"]
-#   for key, val in kwargs.items():
-#     bash_args.append(f"--{key}={val}")
-#   return bash_args
-
 def write_args_to_file(client_id: int, **kwargs):
   args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.pkl")
   kwargs['client_id'] = client_id
@@ -62,15 +54,13 @@ class Server:
     self.iterations = iterations
     self.server_file_path = server_path  # Note: CWD not the same as DGA folder
 
+    # Switch for handling client, server, or run initialization
     if call_type == "init":
       self.init(**kwargs)
-
     elif call_type == "run_client":
       self.run_client(**kwargs)
-
     elif call_type == "server_callback":
       self.server_callback(**kwargs)
-
     else:
       raise Exception(f"error, improper call_type: {call_type}")
 
@@ -90,11 +80,7 @@ class Server:
     # Call 1 client for each gene (and initialize count for iterations)
     count = 0
     for i, (g_name, _) in enumerate(init_genes):
-      write_args_to_file(client_id=i, gene_name=g_name, run_name=self.run_name, algorithm_path=self.algorithm_path,
-                         algorithm_name=self.algorithm_name, client_path=self.client_path, client_name=self.client_name,
-                         num_parallel_processes=self.num_parallel_processes, iterations=self.iterations, call_type="run_client",
-                         count=count, **kwargs)
-      p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={i}"], shell=True)
+      self.make_call(i, g_name, "run_client", count, **kwargs)
 
   def run_client(self, **kwargs):
     # Run gene
@@ -116,10 +102,7 @@ class Server:
       self.write_logs(self.run_name, kwargs['client_id'], log_data)  # Separate logs by client_id
 
     # Callback server
-    write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                       client_path=self.client_path, client_name=self.client_name, num_parallel_processes=self.num_parallel_processes,
-                       iterations=self.iterations, call_type="server_callback", **kwargs)
-    p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"], shell=True)
+    self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
 
   def server_callback(self, **kwargs):
     count = kwargs.pop('count')
@@ -147,11 +130,7 @@ class Server:
 
     # Remove old gene_name from args, and send new gene to client
     kwargs.pop('gene_name')
-    write_args_to_file(run_name=self.run_name, algorithm_path=self.algorithm_path, algorithm_name=self.algorithm_name,
-                       client_path=self.client_path, client_name=self.client_name, num_parallel_processes=self.num_parallel_processes,
-                       iterations=iterations, call_type="run_client", gene_name=gene_name,
-                       count=count, **kwargs)
-    p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={kwargs['client_id']}"], shell=True)
+    self.make_call(call_type="run_client", gene_name=gene_name, count=count, **kwargs)
 
   def write_logs(self, run_name: str, log_name: int, log_data: dict):
 
@@ -161,6 +140,31 @@ class Server:
     log_path = file_path(run_name, LOG_DIR, str(log_name)) + ".log"
     with open(log_path, 'a') as log_file:
       log_file.write(json.dumps(log_data) + "\n")
+
+  def make_call(self, client_id: int, gene_name: str, call_type: str, count: int, **kwargs):
+    write_args_to_file(client_id=client_id,
+                       gene_name=gene_name,
+                       call_type=call_type,   # callback or run_client
+                       count=count,           # current iteration
+                       run_name=self.run_name,
+                       algorithm_path=self.algorithm_path,
+                       algorithm_name=self.algorithm_name,
+                       client_path=self.client_path,
+                       client_name=self.client_name,
+                       num_parallel_processes=self.num_parallel_processes,
+                       iterations=self.iterations,
+                       **kwargs)
+
+    # Run command according to OS
+    # TODO: SOMEONE DO THIS FOR MAC PLEASE
+    if sys.platform == "linux":
+      p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={client_id}"])
+    elif sys.platform == "win32":
+      p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--client_id={client_id}"],
+                         shell=True)
+    elif sys.platform == "darwin":
+      pass    # MAC HANDLING
+
 
 
 # Main function catches server-callbacks & runs clients
