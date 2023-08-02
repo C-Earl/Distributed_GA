@@ -8,6 +8,9 @@ import sys
 import argparse
 import time
 from DGA.pool_functions import write_gene
+from DGA.Algorithm import Algorithm
+from DGA.Client import Client
+from typing import Type
 
 # Constants for filesystem
 POOL_DIR = "pool"
@@ -27,44 +30,49 @@ def load_args_from_file(client_id: int, run_name: str):
 
 
 class Server:
-  def __init__(self, run_name: str, algorithm_path: str, algorithm_name: str, client_path: str, client_name: str,
+  def __init__(self, run_name: str, algorithm: Type[Algorithm], client: Type[Client],
                num_parallel_processes: int, iterations: int, call_type: str = 'init', **kwargs):
-    sys.path.append('/'.join(algorithm_path.split('/')[0:-1]))
-    sys.path.append('/'.join(client_path.split('/')[0:-1]))
-
-    # Add path for algorithm and client to sys.path
-    server_path = os.path.abspath(__file__)               # Get absolute path to current location on machine
-    base_path = '/'.join(server_path.split('/')[0:-2])    # Get path to "./Distributed_GA" ie. base folder
-    full_alg_path = file_path(base_path, '/'.join(algorithm_path.split('/')[0:-1]))     # Prepend to path stub passed by user script
-    full_client_path = file_path(base_path, '/'.join(client_path.split('/')[0:-1]))
-    sys.path.append(full_alg_path)
-    sys.path.append(full_client_path)
-    alg_module_name = algorithm_path.split('/')[-1][0:-3]
-    client_module_name = algorithm_path.split('/')[-1][0:-3]
 
     # Load algorithm and client classes
-    self.algorithm = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name)
-    self.client = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name)
+    self.algorithm = algorithm
+    self.client = client
     self.run_name = run_name
-    self.algorithm_path = algorithm_path
-    self.algorithm_name = algorithm_name
-    self.client_path = client_path
-    self.client_name = client_name
     self.num_parallel_processes = num_parallel_processes
     self.iterations = iterations
-    self.server_file_path = server_path  # Note: CWD not the same as DGA folder
+    self.server_file_path = os.path.abspath(__file__)   # Note: CWD not the same as DGA folder
 
     # Switch for handling client, server, or run initialization
     if call_type == "init":
+
+      # Define paths to client and algorithm files (used for loading in subprocess)
+      self.algorithm_path = os.path.abspath(sys.modules[self.algorithm.__module__].__file__)
+      self.client_path = os.path.abspath(sys.modules[self.client.__module__].__file__)
+      self.algorithm_name = self.algorithm.__name__
+      self.client_name = self.client.__name__
       self.init(**kwargs)
+
     elif call_type == "run_client":
+
+      # Reload paths to client and algorithm files (used for loading in subprocess)
+      self.algorithm_path = kwargs.pop('algorithm_path')
+      self.client_path = kwargs.pop('client_path')
+      self.algorithm_name = kwargs.pop('algorithm_name')
+      self.client_name = kwargs.pop('client_name')
       self.run_client(**kwargs)
+
     elif call_type == "server_callback":
+      # Reload paths to client and algorithm files (used for loading in subprocess)
+      self.algorithm_path = kwargs.pop('algorithm_path')
+      self.client_path = kwargs.pop('client_path')
+      self.algorithm_name = kwargs.pop('algorithm_name')
+      self.client_name = kwargs.pop('client_name')
       self.server_callback(**kwargs)
+
     else:
       raise Exception(f"error, improper call_type: {call_type}")
 
   def init(self, **kwargs):
+
     # Make directory if needed
     # Note: CWD will be at where user-written script is
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
@@ -141,6 +149,7 @@ class Server:
     with open(log_path, 'a') as log_file:
       log_file.write(json.dumps(log_data) + "\n")
 
+  # Save client info to file and run next phase (callback or run_client)
   def make_call(self, client_id: int, gene_name: str, call_type: str, count: int, **kwargs):
     write_args_to_file(client_id=client_id,
                        gene_name=gene_name,
@@ -166,16 +175,35 @@ class Server:
       pass    # MAC HANDLING
 
 
-
 # Main function catches server-callbacks & runs clients
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--client_id', type=int)
-  parser.add_argument('--run_name', type=str)
-  args = parser.parse_args()
+  parser_ = argparse.ArgumentParser()
+  parser_.add_argument('--client_id', type=int)
+  parser_.add_argument('--run_name', type=str)
+  args_ = parser_.parse_args()
 
   # Load args from file
-  all_args = load_args_from_file(args.client_id, args.run_name)
+  all_args = load_args_from_file(args_.client_id, args_.run_name)
+
+  # Establish location of Algorithm and Client classes & add them to python path
+  algorithm_path_ = all_args['algorithm_path']
+  algorithm_name_ = all_args['algorithm_name']
+  client_path_ = all_args['client_path']
+  client_name_ = all_args['client_name']
+  server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
+  base_path_ = '/'.join(server_path_.split('/')[0:-2])    # Get path to "./Distributed_GA" ie. base folder
+  alg_module_path_ = file_path(base_path_, '/'.join(algorithm_path_.split('/')[0:-1]))
+  client_module_path_ = file_path(base_path_, '/'.join(client_path_.split('/')[0:-1]))
+  sys.path.append(alg_module_path_)
+  sys.path.append(client_module_path_)
+
+  # Create Algorithm and Client objects
+  alg_module_name = algorithm_path_.split('/')[-1][:-3]
+  client_module_name = client_path_.split('/')[-1][:-3]
+  algorithm_ = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
+  client_ = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name_)
+  all_args['algorithm'] = algorithm_
+  all_args['client'] = client_
 
   # Run server protocol with bash kwargs
   Server(**all_args)
