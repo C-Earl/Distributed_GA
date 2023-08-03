@@ -7,7 +7,7 @@ import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene
+from DGA.pool_functions import write_gene, load_gene
 from DGA.Algorithm import Algorithm
 from DGA.Client import Client
 from typing import Type
@@ -93,11 +93,11 @@ class Server:
   def run_client(self, **kwargs):
     # Run gene
     gene_name = kwargs['gene_name']
+    gene_data = load_gene(gene_name, self.run_name)  # Note: Read should be safe as long as only 1 client runs gene
     clnt = self.client(self.run_name, gene_name)
-    fitness = clnt.run()
+    fitness = clnt.run(gene_data['gene'], **kwargs)
 
     # Return fitness (by writing to files)
-    gene_data = clnt.gene_data
     gene_data['fitness'] = fitness
     gene_data['status'] = 'tested'
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)

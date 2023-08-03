@@ -109,6 +109,7 @@ class Evolutionary_Algorithm_Base(Algorithm):
       }
       new_gene = self.create_new_gene(simplified_pool, **kwargs)
       gene_name = self.create_gene_file(new_gene)
+      simplified_pool[gene_name] = new_gene
 
       # Update pool in files/class (above ref to pool should contain changes)
       for gene_key, gene_data in simplified_pool.items():
@@ -143,7 +144,7 @@ class Genetic_Algorithm(Evolutionary_Algorithm_Base):
   def create_new_gene(self, gene_pool: dict, **kwargs):
 
     # Initial pool manipulation (remove worst gene)
-    gene_pool = self.pool_manipulation(gene_pool)
+    gene_pool = self.remove_weak(gene_pool)
 
     # Select parents for reproduction
     p1, p2 = self.select_parents(gene_pool)
@@ -158,7 +159,7 @@ class Genetic_Algorithm(Evolutionary_Algorithm_Base):
 
   @abstractmethod
   # Manipulate pool before selection
-  def pool_manipulation(self, gene_pool: dict):
+  def remove_weak(self, gene_pool: dict):
     pass
 
   @abstractmethod
