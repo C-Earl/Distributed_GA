@@ -84,6 +84,10 @@ class Algorithm():
 
 
 class Genetic_Algorithm_Base(Algorithm):
+  def __init__(self, num_genes: int, **kwargs):
+    self.num_genes = num_genes
+    super().__init__(**kwargs)
+
   def fetch_gene(self, **kwargs):
 
     # Only use tested parents
@@ -103,6 +107,7 @@ class Genetic_Algorithm_Base(Algorithm):
     # Otherwise, create a new offspring
     else:
 
+      # Simplify pool and create new gene (user defined)
       simplified_pool = {   # Send only gene and fitness (no status)
         gene_key: {'gene' : gene_data['gene'], 'fitness' : gene_data['fitness']}
         for gene_key, gene_data in valid_parents.items()
@@ -122,26 +127,14 @@ class Genetic_Algorithm_Base(Algorithm):
 
       return gene_name, True
 
+  @abstractmethod
   def create_new_gene(self, gene_pool: dict, **kwargs):
-
-    # Initial pool manipulation
-    gene_pool = self.pool_manipulation(gene_pool)
-
-    # Select parents for reproduction
-    p1, p2 = self.select_parents(gene_pool)
-
-    # Generate offspring with crossover
-    new_gene = self.crossover(p1, p2)
-
-    # Random mutation
-    new_gene = self.mutate(new_gene)
-
-    return new_gene
+    pass
 
   @abstractmethod
   # Create initial gene
   def initial_gene(self, **kwargs):
-    return np.random.rand(10)   # TODO: Should be agnostic to this
+    pass
 
   @abstractmethod
   # Manipulate pool before selection
@@ -166,6 +159,34 @@ class Genetic_Algorithm_Base(Algorithm):
 
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
+  def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
+    self.gene_shape = gene_shape
+    self.mutation_rate = mutation_rate
+    super().__init__(**kwargs)
+
+  # Initialize with random values
+  # Called automatically if pool is not full
+  def initial_gene(self, **kwargs):
+    return np.random.rand(10)
+
+  # Create new gene from current state of pool
+  def create_new_gene(self, gene_pool: dict, **kwargs):
+
+    # Initial pool manipulation (remove worst gene)
+    gene_pool = self.pool_manipulation(gene_pool)
+
+    # Select parents for reproduction
+    p1, p2 = self.select_parents(gene_pool)
+
+    # Generate offspring with crossover
+    new_gene = self.crossover(p1, p2)
+
+    # Random mutation
+    new_gene = self.mutate(new_gene)
+
+    return new_gene
+
+  # Remove worst gene from pool
   def pool_manipulation(self, gene_pool: dict):
     sorted_parents = sorted(gene_pool.items(),
                             key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness
@@ -173,6 +194,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     del gene_pool[worst_gene]  # Remove from pool obj
     return gene_pool
 
+  # Weighted selection of parents based on fitness
   def select_parents(self, gene_pool: dict):
     fitness_scores = [gene_data['fitness'] for _, gene_data in gene_pool.items()]  # Get fitness's (unordered)
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
@@ -181,11 +203,13 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     sorted_genes = sorted(gene_pool.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
     return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
 
+  # Crossover parents at random point
   def crossover(self, p1, p2):
     crossover_point = np.random.randint(0, self.gene_shape[0])
     new_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
     return new_gene
 
+  # Mutate gene at random point
   def mutate(self, gene):
     if np.random.rand() < 0.5:
       mutation_point = np.random.randint(0, self.gene_shape[0])
