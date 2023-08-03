@@ -119,23 +119,25 @@ class My_Client(Client):
 ```
 
 4. The final step is to make the file runnable. To do this, add the following to the very bottom of your file, and fill in the missing arguments:
+
 ```Python
 if __name__ == '__main__':
   import os
+
   alg_path = os.path.abspath(__file__)
   client_path = os.path.abspath(__file__)
 
   Server(run_name="",
-		algorithm_path="scripts/local_example/Example.py",  # Use example Algorithm
-		algorithm_name="Simple_GA",
-		client_path="scripts/local_example/", 	# Fill in your own Client info
-		client_name="",
-		num_parallel_processes=, 
-		gene_shape=(,), 
-		num_genes=, 
-		mutation_rate=,
-		iterations=
-	)
+         algorithm_path="scripts/local_example/Simple_Example.py",  # Use example Algorithm
+         algorithm_name="Simple_GA",
+         client_path="scripts/local_example/",  # Fill in your own Client info
+         client_name="",
+         num_parallel_processes=,
+         gene_shape=(,),
+         num_genes=,
+         mutation_rate=,
+         iterations=
+         )
 ```
 
 * ```run_name``` (str) = a name for your outputs folder

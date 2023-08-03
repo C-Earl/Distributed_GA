@@ -55,11 +55,6 @@ class Algorithm():
   def fetch_gene(self, **kwargs):
     pass
 
-  # Creating new gene
-  @abstractmethod
-  def initial_gene(self, **kwargs):
-    pass
-
   # Take gene and write it to a file. Returns file name and written data
   def create_gene_file(self, gene: Union[np.array, dict]):
     # Generate gene & name
@@ -83,7 +78,7 @@ class Algorithm():
       setattr(self, arg, arg_value)
 
 
-class Genetic_Algorithm_Base(Algorithm):
+class Evolutionary_Algorithm_Base(Algorithm):
   def __init__(self, num_genes: int, **kwargs):
     self.num_genes = num_genes
     super().__init__(**kwargs)
@@ -115,7 +110,7 @@ class Genetic_Algorithm_Base(Algorithm):
       new_gene = self.create_new_gene(simplified_pool, **kwargs)
       gene_name = self.create_gene_file(new_gene)
 
-      # Update pool in files/class (above ref should contain changes)
+      # Update pool in files/class (above ref to pool should contain changes)
       for gene_key, gene_data in simplified_pool.items():
         if gene_key not in valid_parents.keys():     # gene was added
           self.create_gene_file(gene_data)
@@ -128,13 +123,38 @@ class Genetic_Algorithm_Base(Algorithm):
       return gene_name, True
 
   @abstractmethod
-  def create_new_gene(self, gene_pool: dict, **kwargs):
-    pass
-
-  @abstractmethod
   # Create initial gene
   def initial_gene(self, **kwargs):
     pass
+
+  @abstractmethod
+  def create_new_gene(self, gene_pool: dict, **kwargs):
+    pass
+
+
+class Genetic_Algorithm(Evolutionary_Algorithm_Base):
+
+  def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
+    self.gene_shape = gene_shape
+    self.mutation_rate = mutation_rate
+    super().__init__(**kwargs)
+
+  # Create new gene from current state of pool
+  def create_new_gene(self, gene_pool: dict, **kwargs):
+
+    # Initial pool manipulation (remove worst gene)
+    gene_pool = self.pool_manipulation(gene_pool)
+
+    # Select parents for reproduction
+    p1, p2 = self.select_parents(gene_pool)
+
+    # Generate offspring with crossover
+    new_gene = self.crossover(p1, p2)
+
+    # Random mutation
+    new_gene = self.mutate(new_gene)
+
+    return new_gene
 
   @abstractmethod
   # Manipulate pool before selection
@@ -155,72 +175,3 @@ class Genetic_Algorithm_Base(Algorithm):
   # Mutate offspring
   def mutate(self, gene):
     pass
-
-
-class Genetic_Algorithm(Genetic_Algorithm_Base):
-
-  def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
-    self.gene_shape = gene_shape
-    self.mutation_rate = mutation_rate
-    super().__init__(**kwargs)
-
-  # Initialize with random values
-  # Called automatically if pool is not full
-  def initial_gene(self, **kwargs):
-    return np.random.rand(10)
-
-  # Create new gene from current state of pool
-  def create_new_gene(self, gene_pool: dict, **kwargs):
-
-    # Initial pool manipulation (remove worst gene)
-    gene_pool = self.pool_manipulation(gene_pool)
-
-    # Select parents for reproduction
-    p1, p2 = self.select_parents(gene_pool)
-
-    # Generate offspring with crossover
-    new_gene = self.crossover(p1, p2)
-
-    # Random mutation
-    new_gene = self.mutate(new_gene)
-
-    return new_gene
-
-  # Remove worst gene from pool
-  def pool_manipulation(self, gene_pool: dict):
-    sorted_parents = sorted(gene_pool.items(),
-                            key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness
-    worst_gene = sorted_parents[-1][0]
-    del gene_pool[worst_gene]  # Remove from pool obj
-    return gene_pool
-
-  # Weighted selection of parents based on fitness
-  def select_parents(self, gene_pool: dict):
-    fitness_scores = [gene_data['fitness'] for _, gene_data in gene_pool.items()]  # Get fitness's (unordered)
-    normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
-    probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
-    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)
-    sorted_genes = sorted(gene_pool.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
-    return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
-
-  # Crossover parents at random point
-  def crossover(self, p1, p2):
-    crossover_point = np.random.randint(0, self.gene_shape[0])
-    new_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
-    return new_gene
-
-  # Mutate gene at random point
-  def mutate(self, gene):
-    if np.random.rand() < 0.5:
-      mutation_point = np.random.randint(0, self.gene_shape[0])
-      gene[mutation_point] += np.random.uniform(-self.mutation_rate, +self.mutation_rate)
-    return gene
-
-  # Normalize values to positive range [0, +inf) (fitnesses)
-  # Do nothing if already in range [0, +inf)
-  def pos_normalize(self, values):
-    min_v = min(values)
-    if min_v < 0:
-      return [i + abs(min_v) for i in values]
-    else:
-      return values
