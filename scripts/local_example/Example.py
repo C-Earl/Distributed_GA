@@ -4,19 +4,11 @@ from DGA.Server import Server
 import numpy as np
 
 
-# # # # # # # # # # # # # # # # # # # # #
-# SEE README.md                   			
-#          
-# Steps to test your own models:
-# 1. Create new class that inherits Client class
-# 2. Implement run method which runs model and returns fitness value. This is where you can setup your AI-gym, Torch,
-#    Tensorflow, etc. models and environments for fitness testing. (details below)
-#                              
-# Steps to create custom algorithms:			
-# 1. Create the class, and inherit the Algorithm object  
-# 2. Implement the fetch_gene method which handles the creation of new genes (more below)
-# 3. Implement the test_gene method which handles the testing of genes
-# # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # #
+# Use the Client class to load your own models into DGA. the run() function
+# will be called to test your model. The run() function must return a float
+# value representing fitness.
+# # # # # # # # # # # # # # # # # # # # # #
 class Simple_GA_Client(Client):  # <--- Remember to inherit Client class
 
   # Description:
@@ -30,7 +22,6 @@ class Simple_GA_Client(Client):  # <--- Remember to inherit Client class
     gene = self.gene_data['gene']
     fitness = sum([-(i ** 2) for i in gene])
     return fitness
-
 
 if __name__ == '__main__':
   import os
