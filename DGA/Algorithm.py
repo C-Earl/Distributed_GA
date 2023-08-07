@@ -101,7 +101,6 @@ class Evolutionary_Algorithm_Base(Algorithm):
 
     # Otherwise, create a new offspring
     else:
-
       # Simplify pool and create new gene (user defined)
       simplified_pool = {   # Send only gene and fitness (no status)
         gene_key: {'gene' : gene_data['gene'], 'fitness' : gene_data['fitness']}

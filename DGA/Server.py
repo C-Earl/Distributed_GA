@@ -17,6 +17,7 @@ POOL_DIR = "pool"
 LOG_DIR = "logs"
 ARGS_FOLDER = "run_args"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
+DATA_LOCK_NAME = "DATA_LOCK.lock"
 
 def write_args_to_file(client_id: int, **kwargs):
   args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.pkl")
@@ -31,14 +32,16 @@ def load_args_from_file(client_id: int, run_name: str):
 
 class Server:
   def __init__(self, run_name: str, algorithm: Type[Algorithm], client: Type[Client],
-               num_parallel_processes: int, iterations: int, call_type: str = 'init', **kwargs):
+               num_parallel_processes: int, iterations: int, call_type: str = 'init',
+               data_path: str = None, **kwargs):
 
     # Load algorithm and client classes
-    self.algorithm = algorithm
-    self.client = client
+    self.algorithm = algorithm      # Algorithm Class
+    self.client = client            # Client Class
     self.run_name = run_name
     self.num_parallel_processes = num_parallel_processes
-    self.iterations = iterations
+    self.iterations = iterations    # iterations per subprocess
+    self.data_path = data_path  # Location of data folder (if needed, for async loading)
     self.server_file_path = os.path.abspath(__file__)   # Note: CWD not the same as DGA folder
 
     # Switch for handling client, server, or run initialization
@@ -91,10 +94,17 @@ class Server:
       self.make_call(i, g_name, "run_client", count, **kwargs)
 
   def run_client(self, **kwargs):
-    # Run gene
+    # Setup client
     gene_name = kwargs['gene_name']
     gene_data = load_gene(gene_name, self.run_name)  # Note: Read should be safe as long as only 1 client runs gene
     clnt = self.client(self.run_name, gene_name)
+
+    # Load data
+    data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
+    with portalocker.Lock(data_lock_path, timeout=100) as _:
+      clnt.load_data()
+
+    # Test gene
     fitness = clnt.run(gene_data['gene'], **kwargs)
 
     # Return fitness (by writing to files)
@@ -142,8 +152,18 @@ class Server:
 
   def write_logs(self, run_name: str, log_name: int, log_data: dict):
 
-    # TODO: temporary solution, make this more general
-    log_data['gene_data']['gene'] = log_data['gene_data']['gene'].tolist()
+    # Convert to proper type for logging
+    import numpy as np
+    if isinstance(log_data['gene_data']['gene'], dict):
+      for key, val in log_data['gene_data']['gene'].items():
+        if isinstance(val, np.ndarray):
+          log_data['gene_data']['gene'][key] = val.tolist()
+        else:
+          raise Exception(f"Unsupported gene type for logging: {type(val)}")
+    elif isinstance(log_data['gene_data']['gene'], np.array):
+      log_data['gene_data']['gene'] = log_data['gene_data']['gene'].tolist()
+    else:
+      raise Exception(f"Unsupported gene type for logging: {log_data['gene_data']['gene']}")
 
     log_path = file_path(run_name, LOG_DIR, str(log_name)) + ".log"
     with open(log_path, 'a') as log_file:
@@ -162,6 +182,7 @@ class Server:
                        client_name=self.client_name,
                        num_parallel_processes=self.num_parallel_processes,
                        iterations=self.iterations,
+                       data_path=self.data_path,
                        **kwargs)
 
     # Run command according to OS

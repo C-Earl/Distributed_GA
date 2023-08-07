@@ -10,6 +10,10 @@ class Client():
     self.run_name = run_name
     self.gene_name = gene_name
 
+  # Load data (will only be called with proper filelock)
+  def load_data(self, **kwargs):
+    pass
+
   # Run model
   @abstractmethod
   def run(self, gene, **kwargs) -> float:
