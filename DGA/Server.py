@@ -160,7 +160,7 @@ class Server:
           log_data['gene_data']['gene'][key] = val.tolist()
         else:
           raise Exception(f"Unsupported gene type for logging: {type(val)}")
-    elif isinstance(log_data['gene_data']['gene'], np.array):
+    elif isinstance(log_data['gene_data']['gene'], np.ndarray):
       log_data['gene_data']['gene'] = log_data['gene_data']['gene'].tolist()
     else:
       raise Exception(f"Unsupported gene type for logging: {log_data['gene_data']['gene']}")
