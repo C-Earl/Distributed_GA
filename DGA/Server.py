@@ -64,6 +64,7 @@ class Server:
       self.run_client(**kwargs)
 
     elif call_type == "server_callback":
+
       # Reload paths to client and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
       self.client_path = kwargs.pop('client_path')

@@ -96,6 +96,7 @@ class Evolutionary_Algorithm_Base(Algorithm):
       return gene_name, True
 
     # If more than half of the pool is untested, wait.
+    # TODO: Maybe better policy for this?
     elif len(valid_parents.items()) < (self.num_genes / 2):
       return None, False
 
@@ -132,7 +133,7 @@ class Evolutionary_Algorithm_Base(Algorithm):
     pass
 
 
-class Genetic_Algorithm(Evolutionary_Algorithm_Base):
+class Genetic_Algorithm_Base(Evolutionary_Algorithm_Base):
 
   def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
     self.gene_shape = gene_shape
@@ -175,3 +176,70 @@ class Genetic_Algorithm(Evolutionary_Algorithm_Base):
   # Mutate offspring
   def mutate(self, gene):
     pass
+
+
+# This class needs to:
+# - Be what fits in the 'algorithm' arg in the example file
+# - Take in flexible args (np arr or dict) for gene
+class Genetic_Algorithm(Genetic_Algorithm_Base):
+
+  def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
+    super().__init__(gene_shape, mutation_rate, **kwargs)
+
+  # Return randomized gene of shape gene_shape
+  def initial_gene(self, **kwargs):
+    if isinstance(self.gene_shape, tuple):
+      return np.random.rand(*self.gene_shape)
+    elif isinstance(self.gene_shape, dict):
+      return {key: np.random.rand(*shape) for key, shape in self.gene_shape.items()}
+
+  # Remove worst gene from pool
+  def remove_weak(self, gene_pool: dict):
+    sorted_parents = sorted(gene_pool.items(),
+                            key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness
+    worst_gene = sorted_parents[-1][0]
+    del gene_pool[worst_gene]  # Remove from pool obj
+    return gene_pool
+
+  # Select parents for reproduction
+  def select_parents(self, gene_pool: dict):
+    fitness_scores = [gene_data['fitness'] for _, gene_data in gene_pool.items()]  # Get fitness's (unordered)
+    normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
+    probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
+    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)
+    sorted_genes = sorted(gene_pool.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
+    return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
+
+  def crossover(self, p1, p2, gene_shape=None):
+    if gene_shape is None:
+      gene_shape = self.gene_shape
+
+    if isinstance(p1, dict):
+      return {key: self.crossover(p1[key], p2[key], self.gene_shape[key]) for key in p1.keys()}
+    elif isinstance(p1, np.ndarray):
+      crossover_point = np.random.randint(0, np.prod(gene_shape))       # 0 to end of gene_shape
+      # crossover_index = np.unravel_index(crossover_point, gene_shape)   # Unravel index converts 1D index to nD index
+      new_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
+      return new_gene.reshape(gene_shape)
+
+  def mutate(self, gene, gene_shape=None):
+    if gene_shape is None:
+      gene_shape = self.gene_shape
+
+    if isinstance(gene, dict):
+      return {key: self.mutate(val, self.gene_shape[key]) for key, val in gene.items()}
+    elif isinstance(gene, np.ndarray):
+      if np.random.rand() < self.mutation_rate:
+        mutation_point = np.random.randint(0, np.prod(gene_shape))    # 0 to end of gene_shape
+        gene[np.unravel_index(mutation_point, gene_shape)] += np.random.uniform(-self.mutation_rate, +self.mutation_rate)
+        # ^ Unravel index converts 1D index to nD index
+      return gene
+
+  # Normalize values to positive range [0, +inf) (fitnesses)
+  # Do nothing if already in range [0, +inf)
+  def pos_normalize(self, values):
+    min_v = min(values)
+    if min_v < 0:
+      return [i + abs(min_v) for i in values]
+    else:
+      return values
