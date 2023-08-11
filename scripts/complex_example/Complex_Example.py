@@ -82,7 +82,7 @@ if __name__ == '__main__':
   client_path = os.path.abspath(__file__)
   gene_shapes = {'l1': (28 * 28, 120), 'l2': (120, 10)}
   Server(run_name="complex_example",
-         algorithm=Genetic_Algorithm,
-         client=Complex_GA_Client,
-         num_parallel_processes=2, gene_shape=gene_shapes, num_genes=4, mutation_rate=1,
-         iterations=20,)
+         algorithm=Genetic_Algorithm(gene_shape=gene_shapes, mutation_rate=0.5, num_genes=4),
+         client=Complex_GA_Client(),
+         num_parallel_processes=5,
+         iterations=5,)

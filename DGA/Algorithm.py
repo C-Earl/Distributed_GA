@@ -37,7 +37,7 @@ def get_pool_key(gene: Union[np.array, dict]):
 # Assumed that pool is locked for duration of objects existence
 class Algorithm():
 
-  def __init__(self, run_name: str, **kwargs):
+  def prime_alg(self, run_name: str, **kwargs):
     self.run_name = run_name
     self.make_class_vars(**kwargs)
     self.pool_path = file_path(self.run_name, POOL_DIR)
@@ -46,7 +46,7 @@ class Algorithm():
     # Load gene pool
     for root, dirs, files in os.walk(self.pool_path):
       for file in files:
-        file_name = file.split('.')[0]    # This will be unique hash of the gene
+        file_name = file.split('.')[0]  # This will be unique hash of the gene
         gene = load_gene(file_name, self.run_name)
         self.pool[file_name] = gene
 
@@ -135,10 +135,10 @@ class Evolutionary_Algorithm_Base(Algorithm):
 
 class Genetic_Algorithm_Base(Evolutionary_Algorithm_Base):
 
-  def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
+  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, **kwargs):
     self.gene_shape = gene_shape
     self.mutation_rate = mutation_rate
-    super().__init__(**kwargs)
+    super().__init__(num_genes, **kwargs)
 
   # Create new gene from current state of pool
   def create_new_gene(self, gene_pool: dict, **kwargs):
@@ -183,8 +183,8 @@ class Genetic_Algorithm_Base(Evolutionary_Algorithm_Base):
 # - Take in flexible args (np arr or dict) for gene
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
-  def __init__(self, gene_shape: tuple, mutation_rate: float, **kwargs):
-    super().__init__(gene_shape, mutation_rate, **kwargs)
+  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, **kwargs):
+    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
 
   # Return randomized gene of shape gene_shape
   def initial_gene(self, **kwargs):

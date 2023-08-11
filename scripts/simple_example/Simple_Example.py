@@ -32,8 +32,7 @@ if __name__ == '__main__':
   client_path = os.path.abspath(__file__)
 
   Server(run_name="simple_example",     # Name of run (run files saved in a folder with this name)
-         algorithm=Genetic_Algorithm,   # Algorithm for optimizing your model
-         client=Simple_Client,          # Client class with your model
+         algorithm=Genetic_Algorithm(gene_shape=(10,), num_genes=10, mutation_rate=0.25),   # Algorithm for optimizing your model
+         client=Simple_Client(),          # Client class with your model
          num_parallel_processes=5,      # Number of subprocesses to run in parallel
-         iterations=20,                 # Number of genes each subprocess will test
-         gene_shape=(10,), num_genes=10, mutation_rate=0.25)    # Algorithm parameters
+         iterations=20,)                # Number of genes each subprocess will test

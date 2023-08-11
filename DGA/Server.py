@@ -2,6 +2,7 @@ import os.path
 import subprocess
 import json
 import pickle
+import inspect
 from os.path import join as file_path
 import portalocker
 import sys
@@ -31,30 +32,40 @@ def load_args_from_file(client_id: int, run_name: str):
 
 
 class Server:
-  def __init__(self, run_name: str, algorithm: Type[Algorithm], client: Type[Client],
+  def __init__(self, run_name: str, algorithm: Algorithm, client: Client,
                num_parallel_processes: int, iterations: int, call_type: str = 'init',
                data_path: str = None, **kwargs):
 
-    # Load algorithm and client classes
-    self.algorithm = algorithm      # Algorithm Class
-    self.client = client            # Client Class
-    self.run_name = run_name
+    self.algorithm = type(algorithm)      # Algorithm Class
+    self.client = type(client)            # Client Class
+    self.run_name = run_name        # Name of run (used for folder name)
     self.num_parallel_processes = num_parallel_processes
     self.iterations = iterations    # iterations per subprocess
-    self.data_path = data_path  # Location of data folder (if needed, for async loading)
+    self.data_path = data_path      # Location of data folder (if needed, for async loading)
     self.server_file_path = os.path.abspath(__file__)   # Note: CWD not the same as DGA folder
 
     # Switch for handling client, server, or run initialization
     if call_type == "init":
+
+      # Retrieve args passed to Client and Algorithm objects
+      algorithm_args = inspect.getfullargspec(algorithm.__init__).args[1:]
+      client_args = inspect.getfullargspec(client.__init__).args[1:]
+      self.algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
+      self.client_args = {key: client.__dict__[key] for key, val in client_args}
 
       # Define paths to client and algorithm files (used for loading in subprocess)
       self.algorithm_path = os.path.abspath(sys.modules[self.algorithm.__module__].__file__)
       self.client_path = os.path.abspath(sys.modules[self.client.__module__].__file__)
       self.algorithm_name = self.algorithm.__name__
       self.client_name = self.client.__name__
+
       self.init(**kwargs)
 
     elif call_type == "run_client":
+
+      # Set args passed to Client and Algorithm objects
+      self.algorithm_args = kwargs.pop('algorithm_args')
+      self.client_args = kwargs.pop('client_args')
 
       # Reload paths to client and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
@@ -64,6 +75,10 @@ class Server:
       self.run_client(**kwargs)
 
     elif call_type == "server_callback":
+
+      # Set args passed to Client and Algorithm objects
+      self.algorithm_args = kwargs.pop('algorithm_args')
+      self.client_args = kwargs.pop('client_args')
 
       # Reload paths to client and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
@@ -78,13 +93,13 @@ class Server:
   def init(self, **kwargs):
 
     # Make directory if needed
-    # Note: CWD will be at where user-written script is
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
 
     # Generate initial 10 genes
-    alg = self.algorithm(run_name=self.run_name, **kwargs)
+    alg = self.algorithm(**self.algorithm_args)
+    alg.prime_alg(run_name=self.run_name, **kwargs)
     init_genes = []
     for i in range(self.num_parallel_processes):
       init_genes.append(alg.fetch_gene())
@@ -98,7 +113,7 @@ class Server:
     # Setup client
     gene_name = kwargs['gene_name']
     gene_data = load_gene(gene_name, self.run_name)  # Note: Read should be safe as long as only 1 client runs gene
-    clnt = self.client(self.run_name, gene_name)
+    clnt = self.client(**self.client_args)
 
     # Load data
     data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
@@ -136,7 +151,8 @@ class Server:
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
         # Init alg (loads gene pool)
-        alg = self.algorithm(run_name=self.run_name, **kwargs)
+        alg = self.algorithm(**self.algorithm_args)
+        alg.prime_alg(run_name=self.run_name, **kwargs)
 
         # Fetch next gene for testing
         gene_name, success = alg.fetch_gene()
@@ -181,6 +197,8 @@ class Server:
                        algorithm_name=self.algorithm_name,
                        client_path=self.client_path,
                        client_name=self.client_name,
+                       algorithm_args=self.algorithm_args,
+                       client_args=self.client_args,
                        num_parallel_processes=self.num_parallel_processes,
                        iterations=self.iterations,
                        data_path=self.data_path,
@@ -224,8 +242,10 @@ if __name__ == '__main__':
   client_module_name = client_path_.split('/')[-1][:-3]
   algorithm_ = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
   client_ = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name_)
-  all_args['algorithm'] = algorithm_
-  all_args['client'] = client_
+  algorithm_args_ = all_args['algorithm_args']
+  client_args_ = all_args['client_args']
+  all_args['algorithm'] = algorithm_(**algorithm_args_)
+  all_args['client'] = client_(**client_args_)
 
   # Run server protocol with bash kwargs
   Server(**all_args)
