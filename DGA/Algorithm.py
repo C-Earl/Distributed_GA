@@ -4,8 +4,9 @@ import numpy as np
 import hashlib
 from abc import abstractmethod
 from typing import Union
-from DGA.pool_functions import load_gene, write_gene, delete_gene
+from DGA.pool_functions import load_gene, write_gene, delete_gene, read_run_status, write_run_status
 from ast import literal_eval
+import pickle
 
 POOL_DIR = "pool"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
@@ -34,11 +35,27 @@ def get_pool_key(gene: Union[np.array, dict]):
     return consistent_hasher(gene)
 
 
-# Assumed that pool is locked for duration of objects existence
-class Algorithm():
+# Base class for genetic algorithm
+# This is mostly for containing functions that most users won't need (e.g file management)
+# and defining abstract methods
+class Genetic_Algorithm_Base:
 
-  def prime_alg(self, run_name: str, **kwargs):
-    self.run_name = run_name
+  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, **kwargs):
+
+    # Algorithm specific vars
+    self.num_genes = num_genes
+    self.gene_shape = gene_shape
+    self.mutation_rate = mutation_rate
+
+    # Check if run from user script or server
+    # Note: When users start a run, they must pass a GA object with num_genes, gene_shape, and mutation_rate
+    # into the Server obj. This is for syntax simplicity, but we can't load any run files because they don't
+    # exist yet. Just return instead
+    if 'run_name' not in kwargs.keys():
+      return
+
+    # File management vars
+    self.run_name = kwargs.pop('run_name', None)
     self.make_class_vars(**kwargs)
     self.pool_path = file_path(self.run_name, POOL_DIR)
     self.pool = {}
@@ -50,10 +67,9 @@ class Algorithm():
         gene = load_gene(file_name, self.run_name)
         self.pool[file_name] = gene
 
-  # Handles logic for generating new gene given state of the pool
-  @abstractmethod
-  def fetch_gene(self, **kwargs):
-    pass
+    # Load run status
+    # run status used to maintain states of run (e.g. current epoch) that need to be synchronized across multiple processes
+    self.run_status = self.get_status()
 
   # Take gene and write it to a file. Returns file name and written data
   def create_gene_file(self, gene: Union[np.array, dict]):
@@ -72,16 +88,17 @@ class Algorithm():
     delete_gene(gene_name, self.run_name)
 
   # Create class vars with proper typing
-  # Note: bash args always returned as strings
   def make_class_vars(self, **kwargs):
     for arg, arg_value in kwargs.items():
       setattr(self, arg, arg_value)
 
+  # Write to run status file
+  def write_status(self, status: dict):
+    write_run_status(self.run_name, status)
 
-class Evolutionary_Algorithm_Base(Algorithm):
-  def __init__(self, num_genes: int, **kwargs):
-    self.num_genes = num_genes
-    super().__init__(**kwargs)
+  # Read from run status file
+  def get_status(self):
+    return read_run_status(self.run_name)
 
   def fetch_gene(self, **kwargs):
 
@@ -123,23 +140,6 @@ class Evolutionary_Algorithm_Base(Algorithm):
 
       return gene_name, True
 
-  @abstractmethod
-  # Create initial gene
-  def initial_gene(self, **kwargs):
-    pass
-
-  @abstractmethod
-  def create_new_gene(self, gene_pool: dict, **kwargs):
-    pass
-
-
-class Genetic_Algorithm_Base(Evolutionary_Algorithm_Base):
-
-  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, **kwargs):
-    self.gene_shape = gene_shape
-    self.mutation_rate = mutation_rate
-    super().__init__(num_genes, **kwargs)
-
   # Create new gene from current state of pool
   def create_new_gene(self, gene_pool: dict, **kwargs):
 
@@ -156,6 +156,11 @@ class Genetic_Algorithm_Base(Evolutionary_Algorithm_Base):
     new_gene = self.mutate(new_gene)
 
     return new_gene
+
+  @abstractmethod
+  # Create initial gene
+  def initial_gene(self, **kwargs):
+    pass
 
   @abstractmethod
   # Manipulate pool before selection
@@ -178,13 +183,7 @@ class Genetic_Algorithm_Base(Evolutionary_Algorithm_Base):
     pass
 
 
-# This class needs to:
-# - Be what fits in the 'algorithm' arg in the example file
-# - Take in flexible args (np arr or dict) for gene
 class Genetic_Algorithm(Genetic_Algorithm_Base):
-
-  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, **kwargs):
-    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
 
   # Return randomized gene of shape gene_shape
   def initial_gene(self, **kwargs):
@@ -243,3 +242,45 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       return [i + abs(min_v) for i in values]
     else:
       return values
+
+
+class Complex_Genetic_Algorithm(Genetic_Algorithm):
+
+  # Notes:
+  # - Founders pool
+  def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float, **kwargs):
+    self.founders_pool = {}
+    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
+
+  # Create new gene from current state of pool
+  def create_new_gene(self, gene_pool: dict, **kwargs):
+
+    # Initial pool manipulation (remove worst gene)
+    gene_pool = self.remove_weak(gene_pool)
+
+    # Select parents for reproduction
+    p1, p2 = self.select_parents(gene_pool)
+
+    # Generate offspring with crossover
+    new_gene = self.crossover(p1, p2)
+
+    # Random mutation
+    new_gene = self.mutate(new_gene)
+
+    return new_gene
+
+  # Special case; apply penalty based on proximity to founders
+  def remove_weak(self, gene_pool: dict):
+    sorted_parents = sorted(gene_pool.items(),
+        key=lambda gene_kv: gene_kv[1]['fitness'] + self.founder_proximity_penalty(gene_kv[1]['fitness']), reverse=True)  # Sort by fitness + penalty
+    worst_gene = sorted_parents[-1][0]
+    del gene_pool[worst_gene]  # Remove from pool obj
+
+  # Diversity based on cumulative Euclidean distance between gene and other genes in pool
+  # TODO: User defined distance func
+  def get_diversity(self, pool: dict):
+    return sum([np.linalg.norm(gene - other_gene) for gene in pool.values() for other_gene in pool.values()])
+
+  # Penalty for being close to founders
+  def founder_proximity_penalty(self, gene):
+    return sum([np.linalg.norm(gene - founder_gene) for founder_gene in self.founders_pool.values()])

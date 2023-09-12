@@ -8,8 +8,8 @@ import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene, load_gene
-from DGA.Algorithm import Algorithm
+from DGA.pool_functions import write_gene, load_gene, create_run_status
+from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Client import Client
 from typing import Type
 
@@ -98,21 +98,21 @@ class Server:
     os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
 
     # Generate initial 10 genes
-    alg = self.algorithm(**self.algorithm_args)
-    alg.prime_alg(run_name=self.run_name, **kwargs)
+    create_run_status(self.run_name)
+    alg = self.algorithm(run_name=self.run_name, **self.algorithm_args)
     init_genes = []
     for i in range(self.num_parallel_processes):
-      init_genes.append(alg.fetch_gene())
+      init_genes.append(alg.fetch_gene()[0])    # Don't need status, just gene
 
     # Call 1 client for each gene (and initialize count for iterations)
     count = 0
-    for i, (g_name, _) in enumerate(init_genes):
+    for i, g_name in enumerate(init_genes):
       self.make_call(i, g_name, "run_client", count, **kwargs)
 
   def run_client(self, **kwargs):
     # Setup client
     gene_name = kwargs['gene_name']
-    gene_data = load_gene(gene_name, self.run_name)  # Note: Read should be safe as long as only 1 client runs gene
+    gene_data = load_gene(gene_name, self.run_name)
     clnt = self.client(**self.client_args)
 
     # Load data
@@ -151,8 +151,7 @@ class Server:
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
         # Init alg (loads gene pool)
-        alg = self.algorithm(**self.algorithm_args)
-        alg.prime_alg(run_name=self.run_name, **kwargs)
+        alg = self.algorithm(run_name=self.run_name, **self.algorithm_args)
 
         # Fetch next gene for testing
         gene_name, success = alg.fetch_gene()
