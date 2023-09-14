@@ -4,9 +4,7 @@ import numpy as np
 import hashlib
 from abc import abstractmethod
 from typing import Union
-from DGA.pool_functions import load_gene, write_gene, delete_gene, read_run_status, write_run_status
-from ast import literal_eval
-import pickle
+from DGA.pool_functions import load_gene, write_gene, delete_gene, read_run_status, write_run_status, create_run_status
 
 POOL_DIR = "pool"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
@@ -35,17 +33,19 @@ def get_pool_key(gene: Union[np.array, dict]):
     return consistent_hasher(gene)
 
 
-# Base class for genetic algorithm
+## Base class for genetic algorithm ##
 # This is mostly for containing functions that most users won't need (e.g file management)
 # and defining abstract methods
 class Genetic_Algorithm_Base:
 
-  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, **kwargs):
+  def __init__(self, num_genes: int, gene_shape: Union[tuple, dict], mutation_rate: float, iterations: int, **kwargs):
 
     # Algorithm specific vars
     self.num_genes = num_genes
     self.gene_shape = gene_shape
     self.mutation_rate = mutation_rate
+    self.iterations = iterations
+    self.current_iter = kwargs.pop('current_iter', 0)
 
     # Check if run from user script or server
     # Note: When users start a run, they must pass a GA object with num_genes, gene_shape, and mutation_rate
@@ -55,8 +55,9 @@ class Genetic_Algorithm_Base:
       return
 
     # File management vars
+    # TODO: Maybe don't need make_class_vars
     self.run_name = kwargs.pop('run_name', None)
-    self.make_class_vars(**kwargs)
+    self.make_class_vars(**kwargs)  # Initialize other vars (from inheriting classes)
     self.pool_path = file_path(self.run_name, POOL_DIR)
     self.pool = {}
 
@@ -67,17 +68,13 @@ class Genetic_Algorithm_Base:
         gene = load_gene(file_name, self.run_name)
         self.pool[file_name] = gene
 
-    # Load run status
-    # run status used to maintain states of run (e.g. current epoch) that need to be synchronized across multiple processes
-    self.run_status = self.get_status()
-
   # Take gene and write it to a file. Returns file name and written data
   def create_gene_file(self, gene: Union[np.array, dict]):
     # Generate gene & name
     gene_key = get_pool_key(gene)
 
     # Write gene to file
-    gene_data = {'gene': gene, 'fitness': None, 'status': 'being tested'}
+    gene_data = {'gene': gene, 'fitness': None, 'test_state': 'being tested'}
     write_gene(gene_data, gene_key, self.run_name)
 
     # Return gene/file info
@@ -92,19 +89,16 @@ class Genetic_Algorithm_Base:
     for arg, arg_value in kwargs.items():
       setattr(self, arg, arg_value)
 
-  # Write to run status file
-  def write_status(self, status: dict):
-    write_run_status(self.run_name, status)
-
-  # Read from run status file
-  def get_status(self):
-    return read_run_status(self.run_name)
-
+  # Fetch gene from pool; determines what gene should be tested next
   def fetch_gene(self, **kwargs):
+
+    # Load run status
+    # run status used to maintain states of run (e.g. current epoch) that need to be synchronized across multiple processes
+    self.current_iter += 1    # Increment iteration
 
     # Only use tested parents
     valid_parents = {gene_key: gene_data for gene_key, gene_data in self.pool.items()  # Filter untested genes
-                     if (not gene_data['status'] == 'being tested')}
+                     if (not gene_data['test_state'] == 'being tested')}
 
     # If pool is unitialized, add new gene (phase 1)
     if len(self.pool.items()) < self.num_genes:
@@ -115,12 +109,14 @@ class Genetic_Algorithm_Base:
     # If more than half of the pool is untested, wait.
     # TODO: Maybe better policy for this?
     elif len(valid_parents.items()) < (self.num_genes / 2):
+      self.current_iter -= 1    # No gene created, so don't increment (cancels out prior += 1)
       return None, False
 
     # Otherwise, create a new offspring
     else:
+
       # Simplify pool and create new gene (user defined)
-      simplified_pool = {   # Send only gene and fitness (no status)
+      simplified_pool = {   # Send only gene and fitness (no gene status)
         gene_key: {'gene' : gene_data['gene'], 'fitness' : gene_data['fitness']}
         for gene_key, gene_data in valid_parents.items()
       }
@@ -132,7 +128,7 @@ class Genetic_Algorithm_Base:
       for gene_key, gene_data in simplified_pool.items():
         if gene_key not in valid_parents.keys():     # gene was added
           self.create_gene_file(gene_data)
-          self.pool[gene_key] = {'gene': gene_data, 'fitness': None, 'status': 'being tested'}
+          self.pool[gene_key] = {'gene': gene_data, 'fitness': None, 'test_state': 'being tested'}
       for gene_key, gene_data in valid_parents.items():
         if gene_key not in simplified_pool.keys():   # gene was removed
           self.delete_gene_file(gene_key)
@@ -158,7 +154,7 @@ class Genetic_Algorithm_Base:
     return new_gene
 
   @abstractmethod
-  # Create initial gene
+  # Create initial gene to populate pool
   def initial_gene(self, **kwargs):
     pass
 
@@ -182,15 +178,22 @@ class Genetic_Algorithm_Base:
   def mutate(self, gene):
     pass
 
+  @abstractmethod
+  # End condition for run
+  def end_condition(self):
+    pass
+
 
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
   # Return randomized gene of shape gene_shape
   def initial_gene(self, **kwargs):
-    if isinstance(self.gene_shape, tuple):
+    if isinstance(self.gene_shape, tuple | list):
       return np.random.rand(*self.gene_shape)
     elif isinstance(self.gene_shape, dict):
       return {key: np.random.rand(*shape) for key, shape in self.gene_shape.items()}
+    else:
+      raise ValueError(f"gene_shape must be tuple, list or dict, not {self.gene_shape}")
 
   # Remove worst gene from pool
   def remove_weak(self, gene_pool: dict):
@@ -209,6 +212,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     sorted_genes = sorted(gene_pool.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
     return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
 
+  # Crossover p1 and p2 genes
   def crossover(self, p1, p2, gene_shape=None):
     if gene_shape is None:
       gene_shape = self.gene_shape
@@ -221,6 +225,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       new_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
       return new_gene.reshape(gene_shape)
 
+  # Mutate at random point in gene
   def mutate(self, gene, gene_shape=None):
     if gene_shape is None:
       gene_shape = self.gene_shape
@@ -234,6 +239,11 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
         # ^ Unravel index converts 1D index to nD index
       return gene
 
+  # End run when max iterations reached
+  def end_condition(self):
+    if self.current_iter >= self.iterations:
+      return True
+
   # Normalize values to positive range [0, +inf) (fitnesses)
   # Do nothing if already in range [0, +inf)
   def pos_normalize(self, values):
@@ -244,30 +254,57 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       return values
 
 
+# TODO: Get rid of super() calls, confusing
 class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
-  # Notes:
-  # - Founders pool
-  def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float, **kwargs):
+  # - plateau_sensitivity: How steep the fitness curve must be to be considered a plateau
+  #         Smaller values -> more sensitive to plateau
+  # - plateau_sensitivity: How many past fitness's to observe for plateau
+  #         Smaller values -> less accurate detection of plateau
+  # - max_iterations: Max number of genes to test before starting new epoch
+  # - max_epochs: Max number of epochs to run before stopping
+  def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float,
+               plateau_sensitivity: float, plateau_sample_size: int, iterations_per_epoch: int, epochs: int, **kwargs):
+    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)    # This will load the run_status
     self.founders_pool = {}
-    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
+    self.plateau_sensitivity = plateau_sensitivity
+    self.plateau_sample_size = plateau_sample_size
 
-  # Create new gene from current state of pool
-  def create_new_gene(self, gene_pool: dict, **kwargs):
+  # Initialize run status file with iterations and epoch
+  def init_status(self, init_status: dict = None):
+    init_status = {
+      'iterations': 0,        # Num of genes tested
+      'epoch': 0,             # Num of times pool has reached plateau and reset
+      'past_n_fitness': [],   # Past n fitnesses (used to check for plateau)
+    }
+    super().init_status(init_status)    # This will write the run_status
 
-    # Initial pool manipulation (remove worst gene)
-    gene_pool = self.remove_weak(gene_pool)
+  def fetch_gene(self, **kwargs):
 
-    # Select parents for reproduction
-    p1, p2 = self.select_parents(gene_pool)
+    # Check if max iterations
+    if self.current_iter >= self.max_iterations:
+      self.start_new_epoch()
 
-    # Generate offspring with crossover
-    new_gene = self.crossover(p1, p2)
+    # Check for performance plateau
+    past_n_fitness = self.run_status['past_n_fitness']
+    if len(past_n_fitness) >= self.plateau_sample_size:   # If enough samples
+      coefs = np.polyfit(np.arange(len(past_n_fitness)), past_n_fitness, 1)  # Get linear regression coefficients
+      if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
+        self.start_new_epoch()
 
-    # Random mutation
-    new_gene = self.mutate(new_gene)
+    # Check if max epochs
+    epochs = self.run_status['epoch']
+    if epochs >= self.max_epochs:
+      return None, False      # TODO: Figure out how to do terminate signal
 
-    return new_gene
+    
+    self.run_status['iterations'] += 1
+    super().fetch_gene(**kwargs)
+
+  def start_new_epoch(self):
+    self.run_status['epoch'] += 1           # Increment epoch
+    self.run_status['past_n_fitness'] = []  # Reset past fitness's
+    self.ini
 
   # Special case; apply penalty based on proximity to founders
   def remove_weak(self, gene_pool: dict):

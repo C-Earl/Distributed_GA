@@ -1,46 +1,26 @@
 import os.path
 import subprocess
-import json
-import pickle
 import inspect
 from os.path import join as file_path
 import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene, load_gene, create_run_status
+from DGA.pool_functions import write_gene, load_gene, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
+  write_args_to_file, load_args_from_file, read_run_status, write_run_status
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Client import Client
-from typing import Type
-
-# Constants for filesystem
-POOL_DIR = "pool"
-LOG_DIR = "logs"
-ARGS_FOLDER = "run_args"
-POOL_LOCK_NAME = "POOL_LOCK.lock"
-DATA_LOCK_NAME = "DATA_LOCK.lock"
-
-def write_args_to_file(client_id: int, **kwargs):
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.pkl")
-  kwargs['client_id'] = client_id
-  pickle.dump(kwargs, open(args_path, 'wb'))
-
-
-def load_args_from_file(client_id: int, run_name: str):
-  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.pkl")
-  return pickle.load(open(args_path, 'rb'))
 
 
 class Server:
   def __init__(self, run_name: str, algorithm: Algorithm, client: Client,
-               num_parallel_processes: int, iterations: int, call_type: str = 'init',
+               num_parallel_processes: int, call_type: str = 'init',
                data_path: str = None, **kwargs):
 
     self.algorithm = type(algorithm)      # Algorithm Class
     self.client = type(client)            # Client Class
     self.run_name = run_name        # Name of run (used for folder name)
     self.num_parallel_processes = num_parallel_processes
-    self.iterations = iterations    # iterations per subprocess
     self.data_path = data_path      # Location of data folder (if needed, for async loading)
     self.server_file_path = os.path.abspath(__file__)   # Note: CWD not the same as DGA folder
 
@@ -52,6 +32,9 @@ class Server:
       client_args = inspect.getfullargspec(client.__init__).args[1:]
       self.algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
       self.client_args = {key: client.__dict__[key] for key, val in client_args}
+
+      # current_iter not a GA argument, so manually inserted
+      self.algorithm_args.update({'current_iter': 1})
 
       # Define paths to client and algorithm files (used for loading in subprocess)
       self.algorithm_path = os.path.abspath(sys.modules[self.algorithm.__module__].__file__)
@@ -97,25 +80,23 @@ class Server:
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
 
-    # Generate initial 10 genes
-    create_run_status(self.run_name)
-    alg = self.algorithm(run_name=self.run_name, **self.algorithm_args)
+    # Generate initial genes
+    alg = self.algorithm(run_name=self.run_name, init_run=True, **self.algorithm_args)
     init_genes = []
     for i in range(self.num_parallel_processes):
       init_genes.append(alg.fetch_gene()[0])    # Don't need status, just gene
 
-    # Call 1 client for each gene (and initialize count for iterations)
-    count = 0
+    # Call clients to run initial genes
     for i, g_name in enumerate(init_genes):
-      self.make_call(i, g_name, "run_client", count, **kwargs)
+      self.make_call(i, g_name, "run_client", **kwargs)
 
   def run_client(self, **kwargs):
     # Setup client
-    gene_name = kwargs['gene_name']
+    gene_name = kwargs.get('gene_name', None)
     gene_data = load_gene(gene_name, self.run_name)
     clnt = self.client(**self.client_args)
 
-    # Load data
+    # Load data using file locks (presumably training data)
     data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(data_lock_path, timeout=100) as _:
       clnt.load_data()
@@ -125,33 +106,29 @@ class Server:
 
     # Return fitness (by writing to files)
     gene_data['fitness'] = fitness
-    gene_data['status'] = 'tested'
+    gene_data['test_state'] = 'tested'
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(pool_lock_path, timeout=100) as _:
       write_gene(gene_data, gene_name, self.run_name)
-
-      # Write gene to logs
-      timestamp = time.strftime('%H:%M:%S', time.localtime())
-      log_data = {'timestamp': timestamp, 'gene_name': gene_name, 'gene_data': gene_data}
-      self.write_logs(self.run_name, kwargs['client_id'], log_data)  # Separate logs by client_id
+      write_log(self.run_name, kwargs['client_id'], clnt.logger(fitness))
 
     # Callback server
+    self.client_args = {key: clnt.__dict__[key] for key in self.client_args}    # Update args
     self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
 
   def server_callback(self, **kwargs):
-    count = kwargs.pop('count')
-    iterations = self.iterations
-    count += 1
-    if count >= iterations:
-      sys.exit()
 
     # Lock pool during gene creation
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     while True:
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
-        # Init alg (loads gene pool)
+        # Setup algorithm
         alg = self.algorithm(run_name=self.run_name, **self.algorithm_args)
+
+        # Check if run is complete
+        if alg.end_condition():
+          sys.exit()
 
         # Fetch next gene for testing
         gene_name, success = alg.fetch_gene()
@@ -164,44 +141,25 @@ class Server:
 
     # Remove old gene_name from args, and send new gene to client
     kwargs.pop('gene_name')
-    self.make_call(call_type="run_client", gene_name=gene_name, count=count, **kwargs)
+    self.algorithm_args = {key: alg.__dict__[key] for key in self.algorithm_args}    # Update args
+    self.make_call(call_type="run_client", gene_name=gene_name, **kwargs)
 
-  def write_logs(self, run_name: str, log_name: int, log_data: dict):
-
-    # Convert to proper type for logging
-    import numpy as np
-    if isinstance(log_data['gene_data']['gene'], dict):
-      for key, val in log_data['gene_data']['gene'].items():
-        if isinstance(val, np.ndarray):
-          log_data['gene_data']['gene'][key] = val.tolist()
-        else:
-          raise Exception(f"Unsupported gene type for logging: {type(val)}")
-    elif isinstance(log_data['gene_data']['gene'], np.ndarray):
-      log_data['gene_data']['gene'] = log_data['gene_data']['gene'].tolist()
-    else:
-      raise Exception(f"Unsupported gene type for logging: {log_data['gene_data']['gene']}")
-
-    log_path = file_path(run_name, LOG_DIR, str(log_name)) + ".log"
-    with open(log_path, 'a') as log_file:
-      log_file.write(json.dumps(log_data) + "\n")
-
-  # Save client info to file and run next phase (callback or run_client)
-  def make_call(self, client_id: int, gene_name: str, call_type: str, count: int, **kwargs):
+  # Save important args to file and run next phase (callback or run_client)
+  def make_call(self, client_id: int, gene_name: str, call_type: str, **kwargs):
     write_args_to_file(client_id=client_id,
                        gene_name=gene_name,
                        call_type=call_type,   # callback or run_client
-                       count=count,           # current iteration
                        run_name=self.run_name,
                        algorithm_path=self.algorithm_path,
                        algorithm_name=self.algorithm_name,
                        client_path=self.client_path,
                        client_name=self.client_name,
-                       algorithm_args=self.algorithm_args,
+                       # algorithm_args=self.algorithm_args,
                        client_args=self.client_args,
                        num_parallel_processes=self.num_parallel_processes,
-                       iterations=self.iterations,
                        data_path=self.data_path,
                        **kwargs)
+    write_run_status(self.run_name, self.algorithm_args)
 
     # Run command according to OS
     # TODO: SOMEONE DO THIS FOR MAC PLEASE
@@ -241,8 +199,9 @@ if __name__ == '__main__':
   client_module_name = client_path_.split('/')[-1][:-3]
   algorithm_ = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
   client_ = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name_)
-  algorithm_args_ = all_args['algorithm_args']
-  client_args_ = all_args['client_args']
+  algorithm_args_ = read_run_status(args_.run_name) # Arguments required for Algorithm obj
+  all_args['algorithm_args'] = algorithm_args_
+  client_args_ = all_args['client_args']            # Arguments required for Client obj
   all_args['algorithm'] = algorithm_(**algorithm_args_)
   all_args['client'] = client_(**client_args_)
 

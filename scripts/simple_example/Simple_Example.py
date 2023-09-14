@@ -10,8 +10,17 @@ from DGA.Server import Server
 class Simple_Client(Client):                  # <--- Remember to inherit Client class!
   def run(self, gene, **kwargs) -> float:
     fitness = sum([-(i ** 2) for i in gene])  # Fitness is (negative) sum of squares
+    self.gene = gene.tolist()                 # Save gene as class var. for logging
     return fitness                            # Optimization is to maximize fitness
                                               # Perfectly optimized gene is all zeros
+
+  # By default, 'Client' (base class) tracks fitness and time tested
+  # In this override, we add the gene to the log. You can add other info to the log
+  # by saving it as a class variable in run(), and updating the log here.
+  def logger(self, fitness, **kwargs):
+    log = super().logger(fitness, **kwargs)   # Get default log
+    log.update({"gene": self.gene})           # Add gene to log
+    return log
 
 #
 # The Server class is used to run the genetic algorithm.
@@ -31,8 +40,7 @@ if __name__ == '__main__':
   alg_path = os.path.abspath(__file__)
   client_path = os.path.abspath(__file__)
 
-  Server(run_name="simple_example",     # Name of run (run files saved in a folder with this name)
-         algorithm=Genetic_Algorithm(gene_shape=(10,), num_genes=10, mutation_rate=0.25),   # Algorithm for optimizing your model
+  Server(run_name="my_run",     # Name of run (run files saved in a folder with this name)
+         algorithm=Genetic_Algorithm(gene_shape=(10,), num_genes=10, mutation_rate=0.25, iterations=20),   # Algorithm for optimizing your model
          client=Simple_Client(),          # Client class with your model
-         num_parallel_processes=5,      # Number of subprocesses to run in parallel
-         iterations=20,)                # Number of genes each subprocess will test
+         num_parallel_processes=5,)      # Number of subprocesses to run in parallel)                # Total number of genes to test
