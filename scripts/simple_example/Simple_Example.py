@@ -1,6 +1,7 @@
 from DGA.Algorithm import Genetic_Algorithm
 from DGA.Client import Client
 from DGA.Server import Server
+import time
 
 #
 # Use the Client class to load your models into DGA. run() function
@@ -35,12 +36,8 @@ class Simple_Client(Client):                  # <--- Remember to inherit Client 
 #             can be accessed with self.name_of_kwarg.
 # # # # # # # # # # # # # # # # # # # # # #
 if __name__ == '__main__':
-  import os
-
-  alg_path = os.path.abspath(__file__)
-  client_path = os.path.abspath(__file__)
-
+  alg = Genetic_Algorithm(gene_shape=(10,), num_genes=10, mutation_rate=0.25, iterations=100)
   Server(run_name="my_run",     # Name of run (run files saved in a folder with this name)
-         algorithm=Genetic_Algorithm(gene_shape=(10,), num_genes=10, mutation_rate=0.25, iterations=20),   # Algorithm for optimizing your model
+         algorithm=alg,           # Algorithm for optimizing your model
          client=Simple_Client(),          # Client class with your model
          num_parallel_processes=5,)      # Number of subprocesses to run in parallel)                # Total number of genes to test

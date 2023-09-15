@@ -254,7 +254,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       return values
 
 
-# TODO: Get rid of super() calls, confusing
+# TODO: Get rid of super() calls? maybe confusing?
 class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
   # - plateau_sensitivity: How steep the fitness curve must be to be considered a plateau
@@ -264,47 +264,53 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   # - max_iterations: Max number of genes to test before starting new epoch
   # - max_epochs: Max number of epochs to run before stopping
   def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float,
-               plateau_sensitivity: float, plateau_sample_size: int, iterations_per_epoch: int, epochs: int, **kwargs):
-    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)    # This will load the run_status
+               plateau_sensitivity: float, plateau_sample_size: int, iterations_per_epoch: int,
+               epochs: int, past_n_fitness: list = None, **kwargs):
+    super().__init__(num_genes, gene_shape, mutation_rate, iterations=iterations_per_epoch, **kwargs)
     self.founders_pool = {}
     self.plateau_sensitivity = plateau_sensitivity
     self.plateau_sample_size = plateau_sample_size
-
-  # Initialize run status file with iterations and epoch
-  def init_status(self, init_status: dict = None):
-    init_status = {
-      'iterations': 0,        # Num of genes tested
-      'epoch': 0,             # Num of times pool has reached plateau and reset
-      'past_n_fitness': [],   # Past n fitnesses (used to check for plateau)
-    }
-    super().init_status(init_status)    # This will write the run_status
+    self.iterations_per_epoch = iterations_per_epoch
+    self.epochs = epochs
+    self.past_n_fitness = past_n_fitness if past_n_fitness is not None else []
+    self.current_epoch = kwargs.pop('current_epoch', 0)   # Note: current_iter defined in base class
 
   def fetch_gene(self, **kwargs):
 
-    # Check if max iterations
-    if self.current_iter >= self.max_iterations:
+    # Check if max iterations for an epoch
+    if self.current_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
 
     # Check for performance plateau
-    past_n_fitness = self.run_status['past_n_fitness']
+    past_n_fitness = self.past_n_fitness
     if len(past_n_fitness) >= self.plateau_sample_size:   # If enough samples
       coefs = np.polyfit(np.arange(len(past_n_fitness)), past_n_fitness, 1)  # Get linear regression coefficients
       if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
         self.start_new_epoch()
 
     # Check if max epochs
-    epochs = self.run_status['epoch']
-    if epochs >= self.max_epochs:
+    if self.epochs >= self.max_epochs:
       return None, False      # TODO: Figure out how to do terminate signal
 
     
-    self.run_status['iterations'] += 1
+    self.iterations += 1
     super().fetch_gene(**kwargs)
 
   def start_new_epoch(self):
-    self.run_status['epoch'] += 1           # Increment epoch
-    self.run_status['past_n_fitness'] = []  # Reset past fitness's
-    self.ini
+    self.current_epoch += 1
+    self.past_n_fitness = []
+    self.current_iter = 0
+
+    # Move top scoring genes to founders pool
+    top_gene_key, top_gene_data = sorted(self.pool.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)[0]
+    self.founders_pool[top_gene_key] = top_gene_data
+
+    # Re-initialize pool
+    self.pool = {}
+    for i in range(self.num_genes):
+      new_gene = self.initial_gene()
+      # TODO: This should be simplified
+      self.pool[self.create_gene_file(new_gene)] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}
 
   # Special case; apply penalty based on proximity to founders
   def remove_weak(self, gene_pool: dict):

@@ -30,6 +30,6 @@ if __name__ == '__main__':
   if len(all_args.items()) == 0:
 
     ### Manual Inputs ###
-    all_args['run_name'] = "simple_example"
+    all_args['run_name'] = "my_run"
 
   main(**all_args)

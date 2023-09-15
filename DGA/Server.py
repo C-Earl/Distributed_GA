@@ -7,10 +7,16 @@ import sys
 import argparse
 import time
 from DGA.pool_functions import write_gene, load_gene, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
-  write_args_to_file, load_args_from_file, read_run_status, write_run_status
+  write_args_to_file, load_args_from_file, create_run_status, read_run_status, write_run_status
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Client import Client
 
+
+# https://stackoverflow.com/questions/17075071/is-there-a-python-method-to-access-all-non-private-and-non-builtin-attributes-of
+# Helper function to get all public attributes of an object
+def list_public_attributes(input_var):
+  return [k for k, v in vars(input_var).items() if
+          not (k.startswith('_') or callable(v))]
 
 class Server:
   def __init__(self, run_name: str, algorithm: Algorithm, client: Client,
@@ -28,13 +34,10 @@ class Server:
     if call_type == "init":
 
       # Retrieve args passed to Client and Algorithm objects
-      algorithm_args = inspect.getfullargspec(algorithm.__init__).args[1:]
-      client_args = inspect.getfullargspec(client.__init__).args[1:]
-      self.algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
-      self.client_args = {key: client.__dict__[key] for key, val in client_args}
-
-      # current_iter not a GA argument, so manually inserted
-      self.algorithm_args.update({'current_iter': 1})
+      algorithm_args = list_public_attributes(algorithm)
+      client_args = list_public_attributes(client)
+      algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
+      self.client_args = {key: client.__dict__[key] for key in client_args}
 
       # Define paths to client and algorithm files (used for loading in subprocess)
       self.algorithm_path = os.path.abspath(sys.modules[self.algorithm.__module__].__file__)
@@ -42,12 +45,11 @@ class Server:
       self.algorithm_name = self.algorithm.__name__
       self.client_name = self.client.__name__
 
-      self.init(**kwargs)
+      self.init(algorithm_args, **kwargs)
 
     elif call_type == "run_client":
 
       # Set args passed to Client and Algorithm objects
-      self.algorithm_args = kwargs.pop('algorithm_args')
       self.client_args = kwargs.pop('client_args')
 
       # Reload paths to client and algorithm files (used for loading in subprocess)
@@ -60,7 +62,6 @@ class Server:
     elif call_type == "server_callback":
 
       # Set args passed to Client and Algorithm objects
-      self.algorithm_args = kwargs.pop('algorithm_args')
       self.client_args = kwargs.pop('client_args')
 
       # Reload paths to client and algorithm files (used for loading in subprocess)
@@ -73,18 +74,29 @@ class Server:
     else:
       raise Exception(f"error, improper call_type: {call_type}")
 
-  def init(self, **kwargs):
+  # Initialization procedure:
+  # 1. Create directories for run
+  # 2. Create run status file. Status file represents state of genetic algorithm (sync. between all clients)
+  # 3. Generate initial genes (and save updated status)
+  # 4. Call clients to run initial genes
+  def init(self, algorithm_args, **kwargs):
 
     # Make directory if needed
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
 
+    # Create run status file
+    create_run_status(self.run_name, algorithm_args)
+
     # Generate initial genes
-    alg = self.algorithm(run_name=self.run_name, init_run=True, **self.algorithm_args)
+    alg = self.algorithm(run_name=self.run_name, **algorithm_args)
     init_genes = []
     for i in range(self.num_parallel_processes):
       init_genes.append(alg.fetch_gene()[0])    # Don't need status, just gene
+
+    # Update status
+    self.update_algorithm_args(alg, algorithm_args.keys())
 
     # Call clients to run initial genes
     for i, g_name in enumerate(init_genes):
@@ -124,7 +136,8 @@ class Server:
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
         # Setup algorithm
-        alg = self.algorithm(run_name=self.run_name, **self.algorithm_args)
+        algorithm_args = read_run_status(self.run_name)
+        alg = self.algorithm(run_name=self.run_name, **algorithm_args)
 
         # Check if run is complete
         if alg.end_condition():
@@ -133,18 +146,19 @@ class Server:
         # Fetch next gene for testing
         gene_name, success = alg.fetch_gene()
 
-      # Break if fetch was success, otherwise loops
-      if success:
-        break
-      else:
-        time.sleep(1)
+        # Update status & break if fetch was success, otherwise loops
+        if success:
+          self.update_algorithm_args(alg, algorithm_args.keys())
+          break
+        else:
+          time.sleep(1)
 
     # Remove old gene_name from args, and send new gene to client
     kwargs.pop('gene_name')
-    self.algorithm_args = {key: alg.__dict__[key] for key in self.algorithm_args}    # Update args
     self.make_call(call_type="run_client", gene_name=gene_name, **kwargs)
 
   # Save important args to file and run next phase (callback or run_client)
+  # Saves here are per-client, so that each client can run independently
   def make_call(self, client_id: int, gene_name: str, call_type: str, **kwargs):
     write_args_to_file(client_id=client_id,
                        gene_name=gene_name,
@@ -154,12 +168,10 @@ class Server:
                        algorithm_name=self.algorithm_name,
                        client_path=self.client_path,
                        client_name=self.client_name,
-                       # algorithm_args=self.algorithm_args,
                        client_args=self.client_args,
                        num_parallel_processes=self.num_parallel_processes,
                        data_path=self.data_path,
                        **kwargs)
-    write_run_status(self.run_name, self.algorithm_args)
 
     # Run command according to OS
     # TODO: SOMEONE DO THIS FOR MAC PLEASE
@@ -171,6 +183,10 @@ class Server:
     elif sys.platform == "darwin":
       pass    # MAC HANDLING
 
+  # Update status file with new args
+  def update_algorithm_args(self, algorithm: Algorithm, args: list):
+    algorithm_args = {key: algorithm.__dict__[key] for key in args}  # Update args
+    write_run_status(self.run_name, algorithm_args)
 
 # Main function catches server-callbacks & runs clients
 if __name__ == '__main__':

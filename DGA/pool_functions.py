@@ -68,7 +68,6 @@ def create_run_status(run_name: str, init_status: dict):
 def read_run_status(run_name: str):
   status_path = file_path(run_name, RUN_STATUS_NAME)
   with open(status_path, 'r') as status_file:
-    # run_status = pickle.load(status_file)
     run_status = json.load(status_file)
   return run_status
 
