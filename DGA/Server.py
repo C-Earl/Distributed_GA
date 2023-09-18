@@ -19,12 +19,12 @@ def list_public_attributes(input_var):
           not (k.startswith('_') or callable(v))]
 
 class Server:
-  def __init__(self, run_name: str, algorithm: Algorithm, client: Client,
+  def __init__(self, run_name: str, algorithm: Algorithm | type, client: Client | type,
                num_parallel_processes: int, call_type: str = 'init',
                data_path: str = None, **kwargs):
 
-    self.algorithm = type(algorithm)      # Algorithm Class
-    self.client = type(client)            # Client Class
+    # self.algorithm = type(algorithm)      # Algorithm Class
+    # self.client = type(client)            # Client Class
     self.run_name = run_name        # Name of run (used for folder name)
     self.num_parallel_processes = num_parallel_processes
     self.data_path = data_path      # Location of data folder (if needed, for async loading)
@@ -33,21 +33,25 @@ class Server:
     # Switch for handling client, server, or run initialization
     if call_type == "init":
 
-      # Retrieve args passed to Client and Algorithm objects
+      algorithm_type = type(algorithm)
+      client_type = type(client)
+
+      # Retrieve args (set by the user) passed to Client and Algorithm objects
       algorithm_args = list_public_attributes(algorithm)
       client_args = list_public_attributes(client)
       algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
       self.client_args = {key: client.__dict__[key] for key in client_args}
 
       # Define paths to client and algorithm files (used for loading in subprocess)
-      self.algorithm_path = os.path.abspath(sys.modules[self.algorithm.__module__].__file__)
-      self.client_path = os.path.abspath(sys.modules[self.client.__module__].__file__)
-      self.algorithm_name = self.algorithm.__name__
-      self.client_name = self.client.__name__
+      self.algorithm_path = os.path.abspath(sys.modules[algorithm_type.__module__].__file__)
+      self.client_path = os.path.abspath(sys.modules[client_type.__module__].__file__)
+      self.algorithm_name = algorithm_type.__name__
+      self.client_name = client_type.__name__
 
-      self.init(algorithm_args, **kwargs)
+      self.init(algorithm_type, algorithm_args, **kwargs)
 
     elif call_type == "run_client":
+      client_type = client    # Note: client will always be 'type' here, not object. 'run_client' called by Server not user
 
       # Set args passed to Client and Algorithm objects
       self.client_args = kwargs.pop('client_args')
@@ -57,9 +61,10 @@ class Server:
       self.client_path = kwargs.pop('client_path')
       self.algorithm_name = kwargs.pop('algorithm_name')
       self.client_name = kwargs.pop('client_name')
-      self.run_client(**kwargs)
+      self.run_client(client_type, **kwargs)
 
     elif call_type == "server_callback":
+      algorithm_type = algorithm    # Note: alg will always be 'type' here, not object. 'server_callback' called by Server not user
 
       # Set args passed to Client and Algorithm objects
       self.client_args = kwargs.pop('client_args')
@@ -69,7 +74,7 @@ class Server:
       self.client_path = kwargs.pop('client_path')
       self.algorithm_name = kwargs.pop('algorithm_name')
       self.client_name = kwargs.pop('client_name')
-      self.server_callback(**kwargs)
+      self.server_callback(algorithm_type, **kwargs)
 
     else:
       raise Exception(f"error, improper call_type: {call_type}")
@@ -79,7 +84,7 @@ class Server:
   # 2. Create run status file. Status file represents state of genetic algorithm (sync. between all clients)
   # 3. Generate initial genes (and save updated status)
   # 4. Call clients to run initial genes
-  def init(self, algorithm_args, **kwargs):
+  def init(self, algorithm_type: type, algorithm_args: dict, **kwargs):
 
     # Make directory if needed
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
@@ -90,7 +95,7 @@ class Server:
     create_run_status(self.run_name, algorithm_args)
 
     # Generate initial genes
-    alg = self.algorithm(run_name=self.run_name, **algorithm_args)
+    alg = algorithm_type(run_name=self.run_name, **algorithm_args)
     init_genes = []
     for i in range(self.num_parallel_processes):
       init_genes.append(alg.fetch_gene()[0])    # Don't need status, just gene
@@ -102,19 +107,19 @@ class Server:
     for i, g_name in enumerate(init_genes):
       self.make_call(i, g_name, "run_client", **kwargs)
 
-  def run_client(self, **kwargs):
+  def run_client(self, client_type: type, **kwargs):
     # Setup client
     gene_name = kwargs.get('gene_name', None)
     gene_data = load_gene(gene_name, self.run_name)
-    clnt = self.client(**self.client_args)
+    client = client_type(**self.client_args)
 
     # Load data using file locks (presumably training data)
     data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(data_lock_path, timeout=100) as _:
-      clnt.load_data()
+      client.load_data()
 
     # Test gene
-    fitness = clnt.run(gene_data['gene'], **kwargs)
+    fitness = client.run(gene_data['gene'], **kwargs)
 
     # Return fitness (by writing to files)
     gene_data['fitness'] = fitness
@@ -122,13 +127,13 @@ class Server:
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(pool_lock_path, timeout=100) as _:
       write_gene(gene_data, gene_name, self.run_name)
-      write_log(self.run_name, kwargs['client_id'], clnt.logger(fitness))
+      write_log(self.run_name, kwargs['client_id'], client.logger(fitness))
 
     # Callback server
-    self.client_args = {key: clnt.__dict__[key] for key in self.client_args}    # Update args
+    self.client_args = {key: client.__dict__[key] for key in self.client_args}    # Update args
     self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
 
-  def server_callback(self, **kwargs):
+  def server_callback(self, algorithm_type: type, **kwargs):
 
     # Lock pool during gene creation
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
@@ -137,7 +142,7 @@ class Server:
 
         # Setup algorithm
         algorithm_args = read_run_status(self.run_name)
-        alg = self.algorithm(run_name=self.run_name, **algorithm_args)
+        alg = algorithm_type(run_name=self.run_name, **algorithm_args)
 
         # Check if run is complete
         if alg.end_condition():
@@ -159,7 +164,11 @@ class Server:
 
   # Save important args to file and run next phase (callback or run_client)
   # Saves here are per-client, so that each client can run independently
-  def make_call(self, client_id: int, gene_name: str, call_type: str, **kwargs):
+  def make_call(self,
+                client_id: int,
+                gene_name: str,
+                call_type: str,
+                **kwargs):
     write_args_to_file(client_id=client_id,
                        gene_name=gene_name,
                        call_type=call_type,   # callback or run_client
@@ -215,11 +224,8 @@ if __name__ == '__main__':
   client_module_name = client_path_.split('/')[-1][:-3]
   algorithm_ = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
   client_ = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name_)
-  algorithm_args_ = read_run_status(args_.run_name) # Arguments required for Algorithm obj
-  all_args['algorithm_args'] = algorithm_args_
-  client_args_ = all_args['client_args']            # Arguments required for Client obj
-  all_args['algorithm'] = algorithm_(**algorithm_args_)
-  all_args['client'] = client_(**client_args_)
+  all_args['algorithm'] = algorithm_
+  all_args['client'] = client_
 
   # Run server protocol with bash kwargs
   Server(**all_args)
