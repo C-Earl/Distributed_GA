@@ -10,7 +10,7 @@ import time
 # # # # # # # # # # # # # # # # # # # # # #
 class Simple_Client(Client):                  # <--- Remember to inherit Client class!
   def run(self, gene, **kwargs) -> float:
-    fitness = sum([-(i ** 2) for i in gene])  # Fitness is (negative) sum of squares
+    fitness = sum([-(i ** 2) for i in gene.flatten()])  # Fitness is (negative) sum of squares
     self.gene = gene.tolist()                 # Save gene as class var. for logging
     return fitness                            # Optimization is to maximize fitness
                                               # Perfectly optimized gene is all zeros
@@ -36,8 +36,9 @@ class Simple_Client(Client):                  # <--- Remember to inherit Client 
 #             can be accessed with self.name_of_kwarg.
 # # # # # # # # # # # # # # # # # # # # # #
 if __name__ == '__main__':
-  alg = Genetic_Algorithm(gene_shape=(10,), num_genes=10, mutation_rate=0.25, iterations=100)
+  alg = Genetic_Algorithm(gene_shape=(10,10), num_genes=10, mutation_rate=0.05, iterations=1000)
   Server(run_name="my_run",     # Name of run (run files saved in a folder with this name)
          algorithm=alg,           # Algorithm for optimizing your model
          client=Simple_Client(),          # Client class with your model
-         num_parallel_processes=5,)      # Number of subprocesses to run in parallel)                # Total number of genes to test
+         num_parallel_processes=5,      # Number of subprocesses to run in parallel)                # Total number of genes to test
+         log_pool=5,)                   # Log pool every 1 iterations

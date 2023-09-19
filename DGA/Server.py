@@ -7,7 +7,7 @@ import sys
 import argparse
 import time
 from DGA.pool_functions import write_gene, load_gene, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
-  write_args_to_file, load_args_from_file, create_run_status, read_run_status, write_run_status
+  write_args_to_file, load_args_from_file, create_run_status, read_run_status, write_run_status, write_pool_log
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Client import Client
 
@@ -18,10 +18,11 @@ def list_public_attributes(input_var):
   return [k for k, v in vars(input_var).items() if
           not (k.startswith('_') or callable(v))]
 
+
 class Server:
   def __init__(self, run_name: str, algorithm: Algorithm | type, client: Client | type,
                num_parallel_processes: int, call_type: str = 'init',
-               data_path: str = None, **kwargs):
+               data_path: str = None, log_pool: int = -1, **kwargs):
 
     # self.algorithm = type(algorithm)      # Algorithm Class
     # self.client = type(client)            # Client Class
@@ -29,6 +30,7 @@ class Server:
     self.num_parallel_processes = num_parallel_processes
     self.data_path = data_path      # Location of data folder (if needed, for async loading)
     self.server_file_path = os.path.abspath(__file__)   # Note: CWD not the same as DGA folder
+    self.log_pool = log_pool        # Log pool-state every n genes (-1 for no logging)
 
     # Switch for handling client, server, or run initialization
     if call_type == "init":
@@ -87,12 +89,13 @@ class Server:
   def init(self, algorithm_type: type, algorithm_args: dict, **kwargs):
 
     # Make directory if needed
+    # TODO: This prevents continuing runs.
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
 
     # Create run status file
-    create_run_status(self.run_name, algorithm_args)
+    write_run_status(self.run_name, algorithm_args)
 
     # Generate initial genes
     alg = algorithm_type(run_name=self.run_name, **algorithm_args)
@@ -144,6 +147,11 @@ class Server:
         algorithm_args = read_run_status(self.run_name)
         alg = algorithm_type(run_name=self.run_name, **algorithm_args)
 
+        # Update pool log
+        if self.log_pool != -1 and alg.current_iter % self.log_pool == 0:
+          write_pool_log(self.run_name, alg.pool)
+          pass
+
         # Check if run is complete
         if alg.end_condition():
           sys.exit()
@@ -180,6 +188,7 @@ class Server:
                        client_args=self.client_args,
                        num_parallel_processes=self.num_parallel_processes,
                        data_path=self.data_path,
+                       log_pool=self.log_pool,
                        **kwargs)
 
     # Run command according to OS

@@ -105,7 +105,7 @@ def write_run_status(run_name: str, status: dict):
 # Write to client log file
 def write_log(run_name: str, client_id: int, log: dict | type(np.array)):
   log_path = file_path(run_name, LOG_DIR, f'client_{str(client_id)}' + ".log")
-  with open(log_path, 'a') as log_file:
+  with open(log_path, 'a+') as log_file:
     log_file.write(json.dumps(log) + "\n")    # Not json.dump because want each log on a new line
 
 
