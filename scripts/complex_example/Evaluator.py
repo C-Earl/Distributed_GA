@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from DGA.pool_functions import load_gene
+from DGA.pool_functions import load_gene_file
 from os.path import join as file_path
 
 POOL_DIR = "pool"
@@ -13,7 +13,7 @@ def main(run_name: str):
   for root, dirs, files in os.walk(pool_path):
     for file in files:
       file_name = file.split('.')[0]  # This will be unique hash of the gene
-      gene = load_gene(file_name, run_name)
+      gene = load_gene_file(file_name, run_name)
       pool[file_name] = gene
 
   for gene_name, gene in pool.items():

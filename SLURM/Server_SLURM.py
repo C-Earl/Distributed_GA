@@ -6,7 +6,7 @@ import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene, load_gene
+from DGA.pool_functions import write_gene_file, load_gene_file
 
 # Constants for filesystem
 POOL_DIR = "pool"
@@ -70,7 +70,7 @@ class SLURM_Server(Server):
     gene_data['status'] = 'tested'
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(pool_lock_path, timeout=100) as _:
-      write_gene(gene_data, gene_name, self.run_name)
+      write_gene_file(gene_data, gene_name, self.run_name)
 
       # Write gene to logs
       timestamp = time.strftime('%H:%M:%S', time.localtime())

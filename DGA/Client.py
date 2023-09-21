@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from DGA.pool_functions import load_gene
+from DGA.pool_functions import load_gene_file
 import numpy as np
 import time
 

@@ -1,10 +1,12 @@
+import copy
 from os.path import join as file_path
 import os
-import numpy as np
 import hashlib
+import numpy as np
 from abc import abstractmethod
 from typing import Union
-from DGA.pool_functions import load_gene, write_gene, delete_gene, read_run_status, write_run_status, create_run_status
+from DGA.pool_functions import load_gene_file
+from DGA.Pool import Pool, Subset_Pool
 
 POOL_DIR = "pool"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
@@ -16,14 +18,14 @@ def consistent_hasher(x):
 
 
 # Takes np and transforms into tuple (makes it hashable)
-def hashable_nparray(gene: np.array):
+def hashable_nparray(gene: np.ndarray):
   if gene.ndim == 0:  # Scalar value
     return gene.item()
   else:
     return tuple(hashable_nparray(sub_arr) for sub_arr in gene)
 
 
-def get_pool_key(gene: Union[np.array, dict]):
+def get_pool_key(gene: np.ndarray | dict):
   # np arrays not hashable, convert to tuple
   if isinstance(gene, np.ndarray):
     b = bytes(gene)
@@ -70,95 +72,29 @@ class Genetic_Algorithm_Base:
     self.run_name = kwargs.pop('run_name', None)
     self.make_class_vars(**kwargs)  # Initialize other vars (from inheriting classes)
     self.pool_path = file_path(self.run_name, POOL_DIR)
-    self.pool = {}
+    self.pool = Pool()        # Subset_Pool() will have all elements of Pool() meeting condition
+    self.valid_parents = Subset_Pool(condition=lambda key, gene: gene['test_state'] == 'tested')
+    self.pool.add_subset_pool(self.valid_parents)
 
     # Load gene pool
     for root, dirs, files in os.walk(self.pool_path):
       for file in files:
         file_name = file.split('.')[0]  # This will be unique hash of the gene
-        gene = load_gene(file_name, self.run_name)
+        gene = load_gene_file(self.run_name, file_name)
         self.pool[file_name] = gene
-
-  # Take gene and write it to a file. Returns file name and written data
-  def create_gene_file(self, gene: Union[np.array, dict]):
-    # Generate gene & name
-    gene_key = get_pool_key(gene)
-
-    # Write gene to file
-    gene_data = {'gene': gene, 'fitness': None, 'test_state': 'being tested'}
-    write_gene(gene_data, gene_key, self.run_name)
-
-    # Return gene/file info
-    return gene_key
-
-  # Remove gene from pool (in files)
-  def delete_gene_file(self, gene_name: str):
-    delete_gene(gene_name, self.run_name)
 
   # Create class vars with proper typing
   def make_class_vars(self, **kwargs):
     for arg, arg_value in kwargs.items():
       setattr(self, arg, arg_value)
 
-  # Fetch a gene from the pool for testing. This function is a filter, checking that it is safe to create a new gene.
-  # Handles pool-initialization logic, and ensures create_new_gene is only called when it's safe to do so (e.g. enough
-  # genes in pool to make new gene).
-  # - iterates current_iter
-  # - Users should always call super function to ensure create_new_gene gets called
+  @abstractmethod
   def fetch_gene(self, **kwargs) -> tuple:
+    pass
 
-    # Load run status
-    # run status used to maintain states of run (e.g. current epoch) that need to be synchronized across multiple processes
-    self.current_iter += 1    # Increment iteration
-
-    # Only use tested parents
-    valid_parents = {gene_key: gene_data for gene_key, gene_data in self.pool.items()  # Filter untested genes
-                     if (not gene_data['test_state'] == 'being tested')}
-
-    # If pool is unitialized, add new gene (phase 1)
-    if len(self.pool.items()) < self.num_genes:
-      new_gene = self.initial_gene(**kwargs)
-      gene_name = self.create_gene_file(new_gene)
-      return gene_name, True
-
-    # If more than half of the pool is untested, wait.
-    # TODO: Maybe better policy for this?
-    elif len(valid_parents.items()) < (self.num_genes / 2):
-      self.current_iter -= 1    # No gene created, so don't increment (cancels out prior += 1)
-      return None, False
-
-    # Otherwise, create a new offspring
-    else:
-
-      # Simplify pool and create new gene (user defined)
-      simplified_pool = {   # Send only gene and fitness (no gene status)
-        gene_key: {'gene' : gene_data['gene'], 'fitness' : gene_data['fitness']}
-        for gene_key, gene_data in valid_parents.items()
-      }
-      new_gene = self.create_new_gene(simplified_pool, **kwargs)
-      gene_name = self.create_gene_file(new_gene)
-      simplified_pool[gene_name] = new_gene
-
-      # Update pool in files/class (above ref to pool should contain changes)
-      for gene_key, gene_data in simplified_pool.items():
-        if gene_key not in valid_parents.keys():     # gene was added
-          self.create_gene_file(gene_data)
-          self.pool[gene_key] = {'gene': gene_data, 'fitness': None, 'test_state': 'being tested'}
-      for gene_key, gene_data in valid_parents.items():
-        if gene_key not in simplified_pool.keys():   # gene was removed
-          self.delete_gene_file(gene_key)
-          del self.pool[gene_key]
-
-      return gene_name, True
-
-  # Create new gene from current state of pool
-  # - Called by fetch_gene to create new genes
-  def create_new_gene(self, gene_pool: dict, **kwargs):
-    gene_pool = self.remove_weak(gene_pool)       # Initial pool manipulation (remove worst gene(s))
-    p1, p2 = self.select_parents(gene_pool)       # Select parents for reproduction
-    new_gene = self.crossover(p1, p2)             # Generate offspring with crossover
-    new_gene = self.mutate(new_gene)              # Random mutation
-    return new_gene
+  @abstractmethod
+  def create_new_gene(self, **kwargs):
+    pass
 
   @abstractmethod
   # Create initial gene to populate pool
@@ -167,12 +103,12 @@ class Genetic_Algorithm_Base:
 
   @abstractmethod
   # Manipulate pool before selection
-  def remove_weak(self, gene_pool: dict) -> dict:
+  def remove_weak(self):
     pass
 
   @abstractmethod
   # Select parents from pool
-  def select_parents(self, gene_pool: dict) -> tuple:
+  def select_parents(self) -> tuple:
     pass
 
   @abstractmethod
@@ -193,6 +129,47 @@ class Genetic_Algorithm_Base:
 
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
+  # Fetch a gene from the pool for testing. This function is a filter, checking that it is safe to create a new gene.
+  # Handles pool-initialization logic, and ensures create_new_gene is only called when it's safe to do so (e.g. enough
+  # genes in pool to make new gene).
+  # - iterates current_iter
+  # - Users should always call super function to ensure create_new_gene gets called
+  def fetch_gene(self, **kwargs) -> tuple:
+    self.current_iter += 1    # Increment iteration
+
+    # If pool is unitialized, add new gene
+    if len(self.pool.items()) < self.num_genes:
+      new_gene = self.initial_gene(**kwargs)
+      gene_name = get_pool_key(new_gene)
+      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}  # Add to pool obj
+      return gene_name, True
+
+    # If there aren't at least 2 genes in pool, can't create new gene
+    elif len(self.pool.items()) < 2:
+      self.current_iter -= 1    # No gene created, so don't increment (cancels out prior += 1)
+      return None, False
+
+    # Otherwise, create a new offspring
+    else:
+      new_gene = self.create_new_gene(**kwargs)
+      gene_name = get_pool_key(new_gene)      # np.array alone cannot be used as key in dict
+      while gene_name in self.pool.keys():    # Keep attempting until unique
+        new_gene = self.create_new_gene(**kwargs)
+        gene_name = get_pool_key(new_gene)
+
+      # Remove worst gene(s) from the pool
+      self.remove_weak()
+      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}
+      return gene_name, True
+
+  # Create new gene from current state of pool
+  # - Called by fetch_gene to create new genes
+  def create_new_gene(self, **kwargs):
+    p1, p2 = self.select_parents()                # Select parents for reproduction
+    new_gene = self.crossover(p1, p2)             # Generate offspring with crossover
+    new_gene = self.mutate(new_gene)              # Random mutation
+    return new_gene
+
   # Return randomized gene of shape gene_shape
   def initial_gene(self, **kwargs):
     if isinstance(self.gene_shape, tuple | list):
@@ -203,20 +180,19 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       raise ValueError(f"gene_shape must be tuple, list or dict, not {self.gene_shape}")
 
   # Remove worst gene from pool
-  def remove_weak(self, gene_pool: dict) -> dict:
-    sorted_parents = sorted(gene_pool.items(),
-                            key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness
+  def remove_weak(self):
+    sorted_parents = sorted(self.valid_parents.items(),           # Only use tested genes
+        key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness
     worst_gene = sorted_parents[-1][0]
-    del gene_pool[worst_gene]  # Remove from pool obj
-    return gene_pool
+    del self.pool[worst_gene]  # Remove from pool
 
   # Select parents for reproduction
-  def select_parents(self, gene_pool: dict) -> tuple:
-    fitness_scores = [gene_data['fitness'] for _, gene_data in gene_pool.items()]  # Get fitness's (unordered)
+  def select_parents(self) -> tuple:
+    fitness_scores = [gene_data['fitness'] for _, gene_data in self.valid_parents.items()]  # Get fitness's (unordered)
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
     probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
     p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)
-    sorted_genes = sorted(gene_pool.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
+    sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
     return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
 
   # Crossover p1 and p2 genes
@@ -288,9 +264,25 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   # - Must use super().fetch_gene to ensure create_new_gene is called and current_iter is iterated
   def fetch_gene(self, **kwargs):
 
+    self.current_iter += 1  # Increment iteration
+
+    # Only use tested parents
+    valid_parents = self.get_tested_genes()
+
+    # If pool is unitialized, add new gene
+    if len(self.pool.items()) < self.num_genes:
+      new_gene = self.initial_gene(**kwargs)
+      gene_name = self.create_gene_file(new_gene)
+      return gene_name, True
+
+    # If there aren't at least 2 genes in pool, can't create new gene
+    elif len(valid_parents.items()) < 2:
+      self.current_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
+      return None, False
+
     # Check if max iterations for an epoch
-    if self.current_iter >= self.iterations_per_epoch:
-      self.start_new_epoch()     # Call's/returns super fetch_gene
+    elif self.current_iter >= self.iterations_per_epoch:
+      self.start_new_epoch()
 
     # Check for performance plateau
     # past_n_fitness = self.past_n_fitness
@@ -300,8 +292,6 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
     #     # new_gene = self.start_new_epoch()
     #     # return new_gene, True
 
-    return super().fetch_gene(**kwargs)
-
   # Begin a new epoch, and return the first gene of that epoch
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
@@ -309,14 +299,12 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
     self.current_iter = 0
 
     # Move top scoring genes to founders pool
-    valid_parents = {gene_key: gene_data for gene_key, gene_data in self.pool.items()  # Filter untested genes
-                     if (not gene_data['test_state'] == 'being tested')}
+    valid_parents = self.get_tested_genes()
     sorted_gene_fitness = sorted(valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
     top_gene_key, top_gene_data = sorted_gene_fitness[0]
     while top_gene_key in self.founders_pool.keys():      # Ensure no duplicates
       sorted_gene_fitness = sorted_gene_fitness[1:]
       top_gene_key, top_gene_data = sorted_gene_fitness[0]
-
     self.founders_pool[top_gene_key] = top_gene_data
 
     # Re-initialize pool
@@ -325,8 +313,9 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
   # Special case; apply penalty based on proximity to founders
   def remove_weak(self, gene_pool: dict) -> dict:
+    #  + self.founder_proximity_penalty(gene_kv[1]['gene'])
     sorted_parents = sorted(gene_pool.items(),
-        key=lambda gene_kv: gene_kv[1]['fitness'] + self.founder_proximity_penalty(gene_kv[1]['gene']), reverse=True)  # Sort by fitness + penalty
+        key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness + penalty
     worst_gene = sorted_parents[-1][0]
     del gene_pool[worst_gene]  # Remove from pool obj
     return gene_pool

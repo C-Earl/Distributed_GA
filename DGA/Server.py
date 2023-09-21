@@ -1,13 +1,17 @@
+import copy
 import os.path
 import subprocess
 import inspect
 from os.path import join as file_path
+
+import numpy as np
 import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene, load_gene, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
-  write_args_to_file, load_args_from_file, create_run_status, read_run_status, write_run_status, write_pool_log
+from DGA.pool_functions import write_gene_file, load_gene_file, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
+  write_client_args_to_file, load_client_args_from_file, read_run_status, write_run_status, write_pool_log, \
+  delete_gene_file, write_error_log
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Client import Client
 
@@ -17,6 +21,19 @@ from DGA.Client import Client
 def list_public_attributes(input_var):
   return [k for k, v in vars(input_var).items() if
           not (k.startswith('_') or callable(v))]
+
+
+def dict_compare(d1, d2):
+  for k, v in d1.items():
+    if isinstance(v, dict):
+      dict_compare(v, d2[k])
+    elif isinstance(v, np.ndarray):
+      if not np.array_equal(v, d2[k]):
+        return False
+    else:
+      if v != d2[k]:
+        return False
+  return True
 
 
 class Server:
@@ -99,12 +116,17 @@ class Server:
 
     # Generate initial genes
     alg = algorithm_type(run_name=self.run_name, **algorithm_args)
+    original_pool = copy.deepcopy(alg.pool)
     init_genes = []
     for i in range(self.num_parallel_processes):
-      init_genes.append(alg.fetch_gene()[0])    # Don't need status, just gene
+      init_genes.append(alg.fetch_gene()[0])    # Don't need status on init, just gene
+
+    # Update pool files
+    final_pool = alg.pool
+    self.update_pool(original_pool, final_pool)
 
     # Update status
-    self.update_algorithm_args(alg, algorithm_args.keys())
+    self.update_run_status(alg, algorithm_args.keys())
 
     # Call clients to run initial genes
     for i, g_name in enumerate(init_genes):
@@ -112,8 +134,8 @@ class Server:
 
   def run_client(self, client_type: type, **kwargs):
     # Setup client
-    gene_name = kwargs.get('gene_name', None)
-    gene_data = load_gene(gene_name, self.run_name)
+    gene_name = kwargs['gene_name']
+    gene_data = load_gene_file(self.run_name, gene_name)
     client = client_type(**self.client_args)
 
     # Load data using file locks (presumably training data)
@@ -129,7 +151,7 @@ class Server:
     gene_data['test_state'] = 'tested'
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(pool_lock_path, timeout=100) as _:
-      write_gene(gene_data, gene_name, self.run_name)
+      write_gene_file(self.run_name, gene_name, gene_data)
       write_log(self.run_name, kwargs['client_id'], client.logger(fitness))
 
     # Callback server
@@ -143,14 +165,10 @@ class Server:
     while True:
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
-        # Setup algorithm
+        # Setup algorithm & get copy of original pool state
         algorithm_args = read_run_status(self.run_name)
         alg = algorithm_type(run_name=self.run_name, **algorithm_args)
-
-        # Update pool log
-        if self.log_pool != -1 and alg.current_iter % self.log_pool == 0:
-          write_pool_log(self.run_name, alg.pool)
-          pass
+        orginal_pool = copy.deepcopy(alg.pool)
 
         # Check if run is complete
         if alg.end_condition():
@@ -161,7 +179,18 @@ class Server:
 
         # Update status & break if fetch was success, otherwise loops
         if success:
-          self.update_algorithm_args(alg, algorithm_args.keys())
+
+          # Update pool files
+          final_pool = alg.pool
+          self.update_pool(orginal_pool, final_pool)
+
+          # Update pool log
+          if self.log_pool != -1 and alg.current_iter % self.log_pool == 0:
+            write_pool_log(self.run_name, alg.pool)
+
+          # Update run status
+          self.update_run_status(alg, algorithm_args.keys())
+
           break
         else:
           time.sleep(1)
@@ -170,6 +199,22 @@ class Server:
     kwargs.pop('gene_name')
     self.make_call(call_type="run_client", gene_name=gene_name, **kwargs)
 
+  def update_pool(self, original_pool: dict, new_pool: dict):
+    # Injective check from new_pool to original_pool
+    for gene_name in new_pool.keys():
+      if gene_name not in original_pool.keys():     # If it's a newly added gene
+        new_gene_data = new_pool[gene_name]
+        write_gene_file(self.run_name, gene_name, new_gene_data)
+      else:                                         # If it's an old gene...
+        if dict_compare(new_pool[gene_name], original_pool[gene_name]):   # ...and it's changed
+          new_gene_data = new_pool[gene_name]
+          write_gene_file(self.run_name, gene_name, new_gene_data)
+
+    # Injective check from original_pool to new_pool
+    for gene_name in original_pool.keys():
+      if gene_name not in new_pool.keys():          # If it's a removed gene
+        delete_gene_file(self.run_name, gene_name)
+
   # Save important args to file and run next phase (callback or run_client)
   # Saves here are per-client, so that each client can run independently
   def make_call(self,
@@ -177,19 +222,20 @@ class Server:
                 gene_name: str,
                 call_type: str,
                 **kwargs):
-    write_args_to_file(client_id=client_id,
-                       gene_name=gene_name,
-                       call_type=call_type,   # callback or run_client
-                       run_name=self.run_name,
-                       algorithm_path=self.algorithm_path,
-                       algorithm_name=self.algorithm_name,
-                       client_path=self.client_path,
-                       client_name=self.client_name,
-                       client_args=self.client_args,
-                       num_parallel_processes=self.num_parallel_processes,
-                       data_path=self.data_path,
-                       log_pool=self.log_pool,
-                       **kwargs)
+
+    write_client_args_to_file(client_id=client_id,
+                              gene_name=gene_name,
+                              call_type=call_type,  # callback or run_client
+                              run_name=self.run_name,
+                              algorithm_path=self.algorithm_path,
+                              algorithm_name=self.algorithm_name,
+                              client_path=self.client_path,
+                              client_name=self.client_name,
+                              client_args=self.client_args,
+                              num_parallel_processes=self.num_parallel_processes,
+                              data_path=self.data_path,
+                              log_pool=self.log_pool,
+                              **kwargs)
 
     # Run command according to OS
     # TODO: SOMEONE DO THIS FOR MAC PLEASE
@@ -202,7 +248,7 @@ class Server:
       pass    # MAC HANDLING
 
   # Update status file with new args
-  def update_algorithm_args(self, algorithm: Algorithm, args: list):
+  def update_run_status(self, algorithm: Algorithm, args: list):
     algorithm_args = {key: algorithm.__dict__[key] for key in args}  # Update args
     write_run_status(self.run_name, algorithm_args)
 
@@ -214,7 +260,7 @@ if __name__ == '__main__':
   args_ = parser_.parse_args()
 
   # Load args from file
-  all_args = load_args_from_file(args_.client_id, args_.run_name)
+  all_args = load_client_args_from_file(args_.client_id, args_.run_name)
 
   # Establish location of Algorithm and Client classes & add them to python path
   algorithm_path_ = all_args['algorithm_path']
@@ -237,4 +283,8 @@ if __name__ == '__main__':
   all_args['client'] = client_
 
   # Run server protocol with bash kwargs
-  Server(**all_args)
+  try:
+    Server(**all_args)
+  except Exception as e:
+    write_error_log(all_args['run_name'], all_args)
+    raise e
