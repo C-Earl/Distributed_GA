@@ -205,10 +205,10 @@ class Server:
       if gene_name not in original_pool.keys():     # If it's a newly added gene
         new_gene_data = new_pool[gene_name]
         write_gene_file(self.run_name, gene_name, new_gene_data)
-      else:                                         # If it's an old gene...
-        if dict_compare(new_pool[gene_name], original_pool[gene_name]):   # ...and it's changed
-          new_gene_data = new_pool[gene_name]
-          write_gene_file(self.run_name, gene_name, new_gene_data)
+      # else:                                         # This didn't work due to EOF error (pickle)
+      #   if dict_compare(new_pool[gene_name], original_pool[gene_name]):   # ...and it's changed
+      #     new_gene_data = new_pool[gene_name]
+      #     write_gene_file(self.run_name, gene_name, new_gene_data)
 
     # Injective check from original_pool to new_pool
     for gene_name in original_pool.keys():
