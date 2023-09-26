@@ -109,7 +109,7 @@ def write_run_status(run_name: str, status: dict):
   options = jsbeautifier.default_options()
   options.indent_size = 2
   with open(status_path, 'w') as status_file:
-    json.dump(jsbeautifier.beautify(json.dumps(status_copy), options), status_file)
+    status_file.write(jsbeautifier.beautify(json.dumps(status_copy), options))
 
 
 # Write to client log file
