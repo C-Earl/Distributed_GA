@@ -2,6 +2,7 @@ import os
 from os.path import join as file_path
 import pickle
 import json
+import jsbeautifier
 import numpy as np
 import copy
 import ast
@@ -105,8 +106,10 @@ def write_run_status(run_name: str, status: dict):
   # Write to json
   status_copy = jsonify(copy.deepcopy(status))
   status_path = file_path(run_name, RUN_STATUS_NAME_JSON)
+  options = jsbeautifier.default_options()
+  options.indent_size = 2
   with open(status_path, 'w') as status_file:
-    json.dump(status_copy, status_file, indent=2)
+    json.dump(jsbeautifier.beautify(json.dumps(status_copy), options), status_file)
 
 
 # Write to client log file

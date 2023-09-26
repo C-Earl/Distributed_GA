@@ -72,13 +72,12 @@ class Complex_GA_Client(Client):  # <--- Remember to inherit Client class
 
 
 if __name__ == '__main__':
-  import os
-
-  alg_path = os.path.abspath(__file__)
-  client_path = os.path.abspath(__file__)
   gene_shapes = {'l1': (28 * 28, 120), 'l2': (120, 10)}
-  Server(run_name="complex_example",
-         algorithm=Genetic_Algorithm(gene_shape=gene_shapes, mutation_rate=0.5, num_genes=10),
+  GA = Genetic_Algorithm(gene_shape=gene_shapes,
+                         mutation_rate=0.5,
+                         num_genes=10,
+                         iterations=100)
+  Server(run_name="my_run",
+         algorithm=GA,
          client=Complex_GA_Client(),
-         num_parallel_processes=2,
-         iterations=6000,)
+         num_parallel_processes=2,)

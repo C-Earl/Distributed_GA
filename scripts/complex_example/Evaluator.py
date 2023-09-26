@@ -13,7 +13,7 @@ def main(run_name: str):
   for root, dirs, files in os.walk(pool_path):
     for file in files:
       file_name = file.split('.')[0]  # This will be unique hash of the gene
-      gene = load_gene_file(file_name, run_name)
+      gene = load_gene_file(run_name, file_name)
       pool[file_name] = gene
 
   for gene_name, gene in pool.items():
@@ -30,6 +30,6 @@ if __name__ == '__main__':
   if len(all_args.items()) == 0:
 
     ### Manual Inputs ###
-    all_args['run_name'] = "complex_example"
+    all_args['run_name'] = "my_run"
 
   main(**all_args)

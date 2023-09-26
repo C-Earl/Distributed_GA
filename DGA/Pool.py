@@ -31,15 +31,3 @@ class Pool(dict):
       if key in sub_pool:
         del sub_pool[key]         # Since subsets, only delete if in subset
     super().__delitem__(key)
-
-
-if __name__ == '__main__':
-    pool = Pool()
-    sub_pool = Subset_Pool(lambda key, gene: gene['status'] == 'tested')
-    pool['gene1'] = {'status': 'tested', 'fitness': 1}
-    pool['gene2'] = {'status': 'not tested', 'fitness': 2}
-    pool.add_subset_pool(sub_pool)
-    print(sub_pool)
-
-    del pool['gene1']
-    print(sub_pool)

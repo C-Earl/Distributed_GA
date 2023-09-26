@@ -263,27 +263,41 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   # Additional checks made to ensure new gene is safe to create
   # - Must use super().fetch_gene to ensure create_new_gene is called and current_iter is iterated
   def fetch_gene(self, **kwargs):
-
     self.current_iter += 1  # Increment iteration
-
-    # Only use tested parents
-    valid_parents = self.get_tested_genes()
 
     # If pool is unitialized, add new gene
     if len(self.pool.items()) < self.num_genes:
       new_gene = self.initial_gene(**kwargs)
-      gene_name = self.create_gene_file(new_gene)
+      gene_name = get_pool_key(new_gene)  # np.array alone cannot be used as key in dict
+      while gene_name in self.pool.keys():  # Keep attempting until unique
+        new_gene = self.initial_gene(**kwargs)
+        gene_name = get_pool_key(new_gene)
+      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}  # Add to pool obj
       return gene_name, True
 
     # If there aren't at least 2 genes in pool, can't create new gene
-    elif len(valid_parents.items()) < 2:
+    elif len(self.pool.items()) < 2:
       self.current_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
       return None, False
 
     # Check if max iterations for an epoch
     elif self.current_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
+      new_gene = self.initial_gene()
+      gene_name = get_pool_key(new_gene)
+      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}  # Add to pool obj
+      return gene_name, True
 
+    # Otherwise, create a new offspring
+    else:
+      new_gene = self.create_new_gene(**kwargs)
+      gene_name = get_pool_key(new_gene)    # np.array alone cannot be used as key in dict
+      while gene_name in self.pool.keys():  # Keep attempting until unique
+        new_gene = self.create_new_gene(**kwargs)
+        gene_name = get_pool_key(new_gene)
+      self.remove_weak()
+      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}
+      return gene_name, True
     # Check for performance plateau
     # past_n_fitness = self.past_n_fitness
     # if len(past_n_fitness) >= self.plateau_sample_size:   # If enough samples
@@ -299,8 +313,7 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
     self.current_iter = 0
 
     # Move top scoring genes to founders pool
-    valid_parents = self.get_tested_genes()
-    sorted_gene_fitness = sorted(valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
+    sorted_gene_fitness = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
     top_gene_key, top_gene_data = sorted_gene_fitness[0]
     while top_gene_key in self.founders_pool.keys():      # Ensure no duplicates
       sorted_gene_fitness = sorted_gene_fitness[1:]
@@ -309,16 +322,20 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
     # Re-initialize pool
     # Note: When other client-process's return, fetch_gene will handle filling the pool
-    self.pool = {}
+    for gene_key, gene in list(self.pool.items()):
+      if gene['test_state'] == 'tested':
+        del self.pool[gene_key]
 
   # Special case; apply penalty based on proximity to founders
-  def remove_weak(self, gene_pool: dict) -> dict:
-    #  + self.founder_proximity_penalty(gene_kv[1]['gene'])
-    sorted_parents = sorted(gene_pool.items(),
-        key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness + penalty
+  def remove_weak(self):
+    sorted_parents = sorted(    # Sort by fitness + penalty
+        self.valid_parents.items(),
+        key=lambda gene_kv:
+        gene_kv[1]['fitness'] + self.founder_proximity_penalty(gene_kv[1]['gene']),
+        reverse=True
+    )
     worst_gene = sorted_parents[-1][0]
-    del gene_pool[worst_gene]  # Remove from pool obj
-    return gene_pool
+    del self.pool[worst_gene]  # Remove from pool obj
 
   # Diversity based on cumulative Euclidean distance between gene and other genes in pool
   def get_diversity(self, pool: dict):
