@@ -14,10 +14,11 @@ class Client():
     pass
 
   # Write to log
-  def logger(self, fitness: float, **kwargs):
+  def logger(self, fitness: float, iteration: int, **kwargs):
     log = {
       "timestamp" : time.strftime('%H:%M:%S', time.localtime()),
       "fitness" : fitness,
+      "iteration" : iteration,
     }
     return log
 

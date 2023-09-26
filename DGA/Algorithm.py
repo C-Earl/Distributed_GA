@@ -141,7 +141,10 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     if len(self.pool.items()) < self.num_genes:
       new_gene = self.initial_gene(**kwargs)
       gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}  # Add to pool obj
+      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+                              'fitness': None,
+                              'test_state': 'being tested',
+                              'iteration': self.current_iter}
       return gene_name, True
 
     # If there aren't at least 2 genes in pool, can't create new gene
@@ -159,7 +162,10 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
 
       # Remove worst gene(s) from the pool
       self.remove_weak()
-      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}
+      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+                              'fitness': None,
+                              'test_state': 'being tested',
+                              'iteration': self.current_iter}
       return gene_name, True
 
   # Create new gene from current state of pool
@@ -272,7 +278,10 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
       while gene_name in self.pool.keys():  # Keep attempting until unique
         new_gene = self.initial_gene(**kwargs)
         gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}  # Add to pool obj
+      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+                              'fitness': None,
+                              'test_state': 'being tested',
+                              'iteration': self.current_iter}
       return gene_name, True
 
     # If there aren't at least 2 genes in pool, can't create new gene
@@ -285,8 +294,24 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
       self.start_new_epoch()
       new_gene = self.initial_gene()
       gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}  # Add to pool obj
+      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+                              'fitness': None,
+                              'test_state': 'being tested',
+                              'iteration': self.current_iter}
       return gene_name, True
+
+    # Check for performance plateau (new epoch if plateau detected)
+    elif len(self.past_n_fitness) >= self.plateau_sample_size:   # If enough samples
+      coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)  # Get linear regression coefficients
+      if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
+        self.start_new_epoch()
+        new_gene = self.initial_gene()
+        gene_name = get_pool_key(new_gene)
+        self.pool[gene_name] = {'gene': new_gene,  # Add to pool obj
+                                'fitness': None,
+                                'test_state': 'being tested',
+                                'iteration': self.current_iter}
+        return new_gene, True
 
     # Otherwise, create a new offspring
     else:
@@ -296,15 +321,11 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
         new_gene = self.create_new_gene(**kwargs)
         gene_name = get_pool_key(new_gene)
       self.remove_weak()
-      self.pool[gene_name] = {'gene': new_gene, 'fitness': None, 'test_state': 'being tested'}
+      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+                              'fitness': None,
+                              'test_state': 'being tested',
+                              'iteration': self.current_iter}
       return gene_name, True
-    # Check for performance plateau
-    # past_n_fitness = self.past_n_fitness
-    # if len(past_n_fitness) >= self.plateau_sample_size:   # If enough samples
-    #   coefs = np.polyfit(np.arange(len(past_n_fitness)), past_n_fitness, 1)  # Get linear regression coefficients
-    #   if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
-    #     # new_gene = self.start_new_epoch()
-    #     # return new_gene, True
 
   # Begin a new epoch, and return the first gene of that epoch
   def start_new_epoch(self, **kwargs):

@@ -147,12 +147,13 @@ class Server:
     fitness = client.run(gene_data['gene'], **kwargs)
 
     # Return fitness (by writing to files)
+    iteration = gene_data['iteration']
     gene_data['fitness'] = fitness
     gene_data['test_state'] = 'tested'
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(pool_lock_path, timeout=100) as _:
       write_gene_file(self.run_name, gene_name, gene_data)
-      write_log(self.run_name, kwargs['client_id'], client.logger(fitness))
+      write_log(self.run_name, kwargs['client_id'], client.logger(fitness, iteration))
 
     # Callback server
     self.client_args = {key: client.__dict__[key] for key in self.client_args}    # Update args
