@@ -44,17 +44,24 @@ def jsonify(d: dict):
 
 # Arguments passed to client process are first written to file. This function writes them.
 def write_client_args_to_file(client_id: int, **kwargs):
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.json")
   kwargs['client_id'] = client_id
-  with open(args_path, 'w') as args_file:
-    json.dump(kwargs, args_file, indent=2)
 
+  # Write to pkl
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.pkl")
+  with open(args_path, 'wb') as args_file:
+    pickle.dump(kwargs, args_file)
+
+  # Write to json
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.json")
+  kwargs_json = jsonify(copy.deepcopy(kwargs))
+  with open(args_path, 'w') as args_file:
+    json.dump(kwargs_json, args_file, indent=2)
 
 # Server writes args to file, client process the loads with this function
 def load_client_args_from_file(client_id: int, run_name: str):
-  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.json")
-  with open(args_path, 'r') as args_file:
-    return json.load(args_file)
+  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.pkl")   # Only load from pickle file
+  with open(args_path, 'rb') as args_file:
+    return pickle.load(args_file)
 
 
 # Take gene and write it to a file. Returns file name and written data

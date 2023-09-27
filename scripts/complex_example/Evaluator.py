@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from DGA.pool_functions import load_gene_file
+from DGA.File_IO import load_gene_file
 from os.path import join as file_path
 
 POOL_DIR = "pool"

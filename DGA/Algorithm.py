@@ -5,7 +5,7 @@ import hashlib
 import numpy as np
 from abc import abstractmethod
 from typing import Union
-from DGA.pool_functions import load_gene_file
+from DGA.File_IO import load_gene_file
 from DGA.Pool import Pool, Subset_Pool
 
 POOL_DIR = "pool"
@@ -243,7 +243,6 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       return values
 
 
-# TODO: Get rid of super() calls? maybe confusing?
 class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
   # - plateau_sensitivity: How steep the fitness curve must be to be considered a plateau
@@ -262,14 +261,16 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
     self.plateau_sample_size = plateau_sample_size
     self.iterations_per_epoch = iterations_per_epoch
     self.epochs = epochs
-    self.past_n_fitness = past_n_fitness if past_n_fitness is not None else []
+    self.past_n_fitness = past_n_fitness if past_n_fitness is not None else (np.ones(self.plateau_sample_size) * -np.inf)
     self.current_epoch = kwargs.pop('current_epoch', 0)   # Not an argument that needs to be set by user
+    self.epoch_iter = kwargs.pop('epoch_iter', 0)
     self.founders_pool = founders_pool if founders_pool is not None else {}
 
   # Additional checks made to ensure new gene is safe to create
   # - Must use super().fetch_gene to ensure create_new_gene is called and current_iter is iterated
   def fetch_gene(self, **kwargs):
-    self.current_iter += 1  # Increment iteration
+    self.current_iter += 1  # Increment total iteration
+    self.epoch_iter += 1    # Increment iteration for current epoch
 
     # If pool is unitialized, add new gene
     if len(self.pool.items()) < self.num_genes:
@@ -284,13 +285,14 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
                               'iteration': self.current_iter}
       return gene_name, True
 
-    # If there aren't at least 2 genes in pool, can't create new gene
-    elif len(self.pool.items()) < 2:
+    # If there aren't at least 2 tested genes in pool, can't create new gene
+    elif len(self.valid_parents.items()) < 2:
       self.current_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
+      self.epoch_iter -= 1
       return None, False
 
     # Check if max iterations for an epoch
-    elif self.current_iter >= self.iterations_per_epoch:
+    elif self.epoch_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
       new_gene = self.initial_gene()
       gene_name = get_pool_key(new_gene)
@@ -300,18 +302,24 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
                               'iteration': self.current_iter}
       return gene_name, True
 
+    # Add most recent fitness's to list
+    for gene_key, gene in self.valid_parents.items():
+      if gene['iteration'] in range(self.current_iter - self.plateau_sample_size, self.current_iter):
+        ind = self.plateau_sample_size - (self.current_iter - gene['iteration'])
+        self.past_n_fitness[ind] = gene['fitness']
+    coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)  # Get linear regression coefficients
+
     # Check for performance plateau (new epoch if plateau detected)
-    elif len(self.past_n_fitness) >= self.plateau_sample_size:   # If enough samples
-      coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)  # Get linear regression coefficients
-      if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
-        self.start_new_epoch()
-        new_gene = self.initial_gene()
-        gene_name = get_pool_key(new_gene)
-        self.pool[gene_name] = {'gene': new_gene,  # Add to pool obj
-                                'fitness': None,
-                                'test_state': 'being tested',
-                                'iteration': self.current_iter}
-        return new_gene, True
+    if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
+      # print(self.current_iter)
+      self.start_new_epoch()
+      new_gene = self.initial_gene()
+      gene_name = get_pool_key(new_gene)
+      self.pool[gene_name] = {'gene': new_gene,  # Add to pool obj
+                              'fitness': None,
+                              'test_state': 'being tested',
+                              'iteration': self.current_iter}
+      return gene_name, True
 
     # Otherwise, create a new offspring
     else:
@@ -330,8 +338,8 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   # Begin a new epoch, and return the first gene of that epoch
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
-    self.past_n_fitness = []
-    self.current_iter = 0
+    self.epoch_iter = 0
+    self.past_n_fitness = (np.ones(self.plateau_sample_size) * -np.inf)
 
     # Move top scoring genes to founders pool
     sorted_gene_fitness = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
@@ -343,9 +351,8 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
     # Re-initialize pool
     # Note: When other client-process's return, fetch_gene will handle filling the pool
-    for gene_key, gene in list(self.pool.items()):
-      if gene['test_state'] == 'tested':
-        del self.pool[gene_key]
+    for gene_key, gene in list(self.valid_parents.items()):
+      del self.pool[gene_key]
 
   # Special case; apply penalty based on proximity to founders
   def remove_weak(self):

@@ -9,7 +9,7 @@ import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene_file, load_gene_file, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
+from DGA.File_IO import write_gene_file, load_gene_file, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
   write_client_args_to_file, load_client_args_from_file, read_run_status, write_run_status, write_pool_log, \
   delete_gene_file, write_error_log
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm

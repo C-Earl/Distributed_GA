@@ -6,7 +6,7 @@ import portalocker
 import sys
 import argparse
 import time
-from DGA.pool_functions import write_gene_file, load_gene_file
+from DGA.File_IO import write_gene_file, load_gene_file
 
 # Constants for filesystem
 POOL_DIR = "pool"
