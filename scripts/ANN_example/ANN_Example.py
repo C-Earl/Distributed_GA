@@ -9,7 +9,6 @@ from torchvision.transforms import ToTensor
 
 DEVICE = torch.device('cpu')    # CPU will be faster than GPU for this example
 
-
 class ArtificialNeuralNet(nn.Module):
   def __init__(self, gene):
     super().__init__()
@@ -30,11 +29,6 @@ class ArtificialNeuralNet(nn.Module):
     return x
 
 
-#
-# Use the Model class to load your own models into DGA. the run() function
-# will be called to test your model. The run() function must return a float
-# value representing fitness.
-# # # # # # # # # # # # # # # # # # # # # #
 class Complex_GA_Model(Model):  # <--- Remember to inherit Model class
 
   # Load data before running. All file access in load_data is read/write safe, ie. no other subprocess will
@@ -56,14 +50,12 @@ class Complex_GA_Model(Model):  # <--- Remember to inherit Model class
     # Test ANN
     correct = 0
     total = 0
-    # since we're not training, we don't need to calculate the gradients for our outputs
-    with torch.no_grad():
+    
+    with torch.no_grad():							# since we're not training, we don't need to calculate the gradients for our outputs
       for data in self.testloader:
         images, labels = data
-        # calculate outputs by running images through the network
-        outputs = ANN(images)
-        # the class with the highest energy is what we choose as prediction
-        _, predicted = torch.max(outputs.data, 1)
+        outputs = ANN(images)		    	# calculate outputs by running images through the network
+        _, predicted = torch.max(outputs.data, 1)	# the class with the highest energy is what we choose as prediction
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
 

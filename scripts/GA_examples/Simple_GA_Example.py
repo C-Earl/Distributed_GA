@@ -30,18 +30,16 @@ class Simple_Model(Model):                  # <--- Remember to inherit Model cla
 #   algorithm: Algorithm for optimizing your model
 #   model: Model class with your model
 #   num_parallel_processes: Number of subprocesses to run in parallel
-#   iterations: Number of genes each subprocess will test
 #   **kwargs: Any additional parameters, including args specific to your algorithm.
 #             Args are passed automatically to the algorithm and model classes, and
 #             can be accessed with self.name_of_kwarg.
 # # # # # # # # # # # # # # # # # # # # # #
 if __name__ == '__main__':
-  alg = Genetic_Algorithm(gene_shape=(100,100),
-                          num_genes=25,
-                          mutation_rate=0.25,
-                          iterations=100,)
-  Server(run_name="Simple_GA_Example",  # Name of run (run files saved in a folder with this name)
-         algorithm=alg,  # Algorithm for optimizing your model
-         model=Simple_Model(),  # Model class you made
-         num_parallel_processes=5,  # Number of subprocesses to run in parallel)                # Total number of genes to test
-         log_pool=-1, )                   # Log pool every 1 iterations
+  alg = Genetic_Algorithm(gene_shape=(100,100),		# Shape of gene np.ndarray
+                          num_genes=25,						# Number of genes to test
+                          mutation_rate=0.25,			# Probability of mutation
+                          iterations=100,)				# Total # of genes to test
+  Server(run_name="Simple_GA_Example",  	
+         algorithm=alg,
+         model=Simple_Model(),
+         num_parallel_processes=5,)	

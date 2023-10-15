@@ -4,15 +4,13 @@ from DGA.Server import Server
 from DGA.Plotting import plot_model_logs
 import numpy as np
 
-#
-# Use the Model class to load your models into DGA. run() function
-# will be called to test your model. The run() function must return a float
-# value representing fitness.
-# # # # # # # # # # # # # # # # # # # # # #
+# Generate target vectors
 vector_size = 10
 target_vector_1 = np.identity(vector_size)
 target_vector_2 = np.flip(np.identity(vector_size), axis=1)
 target_vector_3 = np.zeros_like(target_vector_1)
+
+# Find closest target vector and return negative distance as fitness
 class Simple_Model(Model):                  # <--- Remember to inherit Model class!
   def run(self, gene, **kwargs) -> float:
     smallest_diff = np.inf
@@ -22,27 +20,14 @@ class Simple_Model(Model):                  # <--- Remember to inherit Model cla
         smallest_diff = diff
     return -smallest_diff
 
-  # By default, 'Model' (base class) tracks fitness and time tested
-  # In this override, we add the gene to the log. You can add other info to the log
-  # by saving it as a class variable in run(), and updating the log here.
-  def logger(self, fitness, iteration, **kwargs):
-    log = super().logger(fitness, iteration, **kwargs)   # Get default log
-    # log.update({"gene": self.gene})           # Add gene to log
-    return log
 
-#
-# The Server class is used to run the genetic algorithm.
-# Arguments:
-#   run_name: Name of run (run files saved in a folder with this name)
-#   algorithm: Algorithm for optimizing your model
-#   model: Model class with your model
-#   num_parallel_processes: Number of subprocesses to run in parallel
-#   iterations: Number of genes each subprocess will test
-#   **kwargs: Any additional parameters, including args specific to your algorithm.
-#             Args are passed automatically to the algorithm and model classes, and
-#             can be accessed with self.name_of_kwarg.
-# # # # # # # # # # # # # # # # # # # # # #
 if __name__ == '__main__':
+  # - plateau_sensitivity: How steep the fitness curve must be to be considered a plateau
+  #         Smaller values -> more sensitive to plateau
+  # - plateau_sample_size: How many past fitness's to observe for plateau
+  #         Smaller values -> less accurate detection of plateau
+  # - iterations_per_epoch: Max number of genes to test before starting new epoch
+  # - epochs: Max number of epochs to run before stopping
   alg = Complex_Genetic_Algorithm(gene_shape=(vector_size,vector_size),
                                   num_genes=100,
                                   mutation_rate=0.9,
@@ -50,8 +35,8 @@ if __name__ == '__main__':
                                   epochs=5,
                                   plateau_sensitivity=1e-3,
                                   plateau_sample_size=3000,)
-  Server(run_name="Complex_GA_Example",  # Name of run (run files saved in a folder with this name)
-         algorithm=alg,  # Algorithm for optimizing your model
-         model=Simple_Model(),  # Model class with your model
-         num_parallel_processes=5,  # Number of subprocesses to run in parallel)                # Total number of genes to test
-         log_pool=-1, )                   # Log pool every 1 iterations
+  Server(run_name="Complex_GA_Example",
+         algorithm=alg,
+         model=Simple_Model(),
+         num_parallel_processes=5,
+         log_pool=-1, )

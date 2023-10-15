@@ -247,10 +247,10 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
   # - plateau_sensitivity: How steep the fitness curve must be to be considered a plateau
   #         Smaller values -> more sensitive to plateau
-  # - plateau_sensitivity: How many past fitness's to observe for plateau
+  # - plateau_sample_size: How many past fitness's to observe for plateau
   #         Smaller values -> less accurate detection of plateau
-  # - max_iterations: Max number of genes to test before starting new epoch
-  # - max_epochs: Max number of epochs to run before stopping
+  # - iterations_per_epoch: Max number of genes to test before starting new epoch
+  # - epochs: Max number of epochs to run before stopping
   # - Note: iterations is not used for logic in this algorithm (but still needed for constructor).
   #         replaced with iterations_per_epoch
   def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float,
