@@ -1,5 +1,5 @@
 from DGA.Algorithm import Genetic_Algorithm_Base, Genetic_Algorithm
-from DGA.Client import Client
+from DGA.Model import Model
 from DGA.Server import Server
 import torchvision
 import torch
@@ -31,11 +31,11 @@ class ArtificialNeuralNet(nn.Module):
 
 
 #
-# Use the Client class to load your own models into DGA. the run() function
+# Use the Model class to load your own models into DGA. the run() function
 # will be called to test your model. The run() function must return a float
 # value representing fitness.
 # # # # # # # # # # # # # # # # # # # # # #
-class Complex_GA_Client(Client):  # <--- Remember to inherit Client class
+class Complex_GA_Model(Model):  # <--- Remember to inherit Model class
 
   # Load data before running. All file access in load_data is read/write safe, ie. no other subprocess will
   # access the same file at the same time. This is to prevent any OS read/write errors.
@@ -79,5 +79,5 @@ if __name__ == '__main__':
                          iterations=100)
   Server(run_name="my_run",
          algorithm=GA,
-         client=Complex_GA_Client(),
-         num_parallel_processes=2,)
+         model=Complex_GA_Model(),
+         num_parallel_processes=2, )

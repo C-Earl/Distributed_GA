@@ -192,12 +192,12 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     worst_gene = sorted_parents[-1][0]
     del self.pool[worst_gene]  # Remove from pool
 
-  # Select parents for reproduction
+  # Select parents for reproduction using weighted probabilities based on fitness. Higher fitness -> higher probability of selection
   def select_parents(self) -> tuple:
     fitness_scores = [gene_data['fitness'] for _, gene_data in self.valid_parents.items()]  # Get fitness's (unordered)
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
     probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
-    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)
+    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)	# Select 2 parents
     sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
     return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
 
@@ -350,7 +350,7 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
     self.founders_pool[top_gene_key] = top_gene_data
 
     # Re-initialize pool
-    # Note: When other client-process's return, fetch_gene will handle filling the pool
+    # Note: When other model-process's return, fetch_gene will handle filling the pool
     for gene_key, gene in list(self.valid_parents.items()):
       del self.pool[gene_key]
 
