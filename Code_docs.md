@@ -1,6 +1,6 @@
 # Abstract Implementation:
 
-This section will show how the model is conceptualized; however, note that the concept and actual code implementation are quite different. 
+This section will show how the model is conceptualized; however, note that the code is under development and the actual code implementation are somewhat different. 
 
 ![Diagram of DGA](/diagrams/DGA_diagram_0.png)
 
