@@ -42,24 +42,24 @@ def jsonify(d: dict):
 #       }
 #       write_error_log(run_name, error_log)
 
-# Arguments passed to client process are first written to file. This function writes them.
-def write_client_args_to_file(client_id: int, **kwargs):
-  kwargs['client_id'] = client_id
+# Arguments passed to model process are first written to file. This function writes them.
+def write_model_args_to_file(model_id: int, **kwargs):
+  kwargs['model_id'] = model_id
 
   # Write to pkl
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.pkl")
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"model{model_id}_args.pkl")
   with open(args_path, 'wb') as args_file:
     pickle.dump(kwargs, args_file)
 
   # Write to json
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"client{client_id}_args.json")
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"model{model_id}_args.json")
   kwargs_json = jsonify(copy.deepcopy(kwargs))
   with open(args_path, 'w') as args_file:
     json.dump(kwargs_json, args_file, indent=2)
 
-# Server writes args to file, client process the loads with this function
-def load_client_args_from_file(client_id: int, run_name: str):
-  args_path = file_path(run_name, ARGS_FOLDER, f"client{client_id}_args.pkl")   # Only load from pickle file
+# Server writes args to file, model process the loads with this function
+def load_model_args_from_file(model_id: int, run_name: str):
+  args_path = file_path(run_name, ARGS_FOLDER, f"model{model_id}_args.pkl")   # Only load from pickle file
   with open(args_path, 'rb') as args_file:
     return pickle.load(args_file)
 
@@ -119,15 +119,15 @@ def write_run_status(run_name: str, status: dict):
     status_file.write(jsbeautifier.beautify(json.dumps(status_copy), options))
 
 
-# Write to client log file
-def write_log(run_name: str, client_id: int, log: dict | np.ndarray):
-  log_path = file_path(run_name, LOG_DIR, f'client_{str(client_id)}' + ".log")
+# Write to model log file
+def write_log(run_name: str, model_id: int, log: dict | np.ndarray):
+  log_path = file_path(run_name, LOG_DIR, f'model_{str(model_id)}' + ".log")
   with open(log_path, 'a+') as log_file:
     log_file.write(json.dumps(log) + "\n")    # Not json.dump because want each log on a new line
 
 
-def read_log(run_name: str, client_id: int):
-  log_path = file_path(run_name, LOG_DIR, f'client_{str(client_id)}' + ".log")
+def read_log(run_name: str, model_id: int):
+  log_path = file_path(run_name, LOG_DIR, f'model_{str(model_id)}' + ".log")
   with open(log_path, 'r') as log_file:
     logs = log_file.readlines()
   for i in range(len(logs)):
