@@ -42,6 +42,7 @@ class Server_SLURM(Server):
 
     # Call sbatch script
     if call_type == 'run_model':
+      print(f"sbatch {self.sbatch_script} --model_id={model_id} --run_name={self.run_name}")
       cmd(f"sbatch {self.sbatch_script} --model_id={model_id} --run_name={self.run_name}")
     elif call_type == 'run_server':     # If true, means already on node, no need to make new node
       alg_module_name = self.algorithm_path_.split('/')[-1][:-3]
