@@ -243,7 +243,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       return values
 
 
-class Complex_Genetic_Algorithm(Genetic_Algorithm):
+class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
   # - plateau_sensitivity: How steep the fitness curve must be to be considered a plateau
   #         Smaller values -> more sensitive to plateau
@@ -253,17 +253,20 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   # - max_epochs: Max number of epochs to run before stopping
   # - Note: iterations is not used for logic in this algorithm (but still needed for constructor).
   #         replaced with iterations_per_epoch
-  def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float,
+  def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float, mutation_decay: float,
                plateau_sensitivity: float, plateau_sample_size: int, iterations_per_epoch: int,
-               epochs: int, past_n_fitness: list = None, founders_pool: dict = None, **kwargs):
+               epochs: int, warmup: int, past_n_fitness: list = None, founders_pool: dict = None, **kwargs):
     super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
+    self.mutation_decay = mutation_decay
     self.plateau_sensitivity = plateau_sensitivity
     self.plateau_sample_size = plateau_sample_size
     self.iterations_per_epoch = iterations_per_epoch
     self.epochs = epochs
+    self.warmup = warmup
     self.past_n_fitness = past_n_fitness if past_n_fitness is not None else (np.ones(self.plateau_sample_size) * -np.inf)
     self.current_epoch = kwargs.pop('current_epoch', 0)   # Not an argument that needs to be set by user
     self.epoch_iter = kwargs.pop('epoch_iter', 0)
+    self.original_mutation_rate = kwargs.pop('original_mutation_rate', mutation_rate)  # Save original rate for resetting on epochs
     self.founders_pool = founders_pool if founders_pool is not None else {}
 
   # Additional checks made to ensure new gene is safe to create
@@ -271,6 +274,7 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   def fetch_gene(self, **kwargs):
     self.current_iter += 1  # Increment total iteration
     self.epoch_iter += 1    # Increment iteration for current epoch
+    self.mutation_rate *= self.mutation_decay  # Decay mutation rate
 
     # If pool is unitialized, add new gene
     if len(self.pool.items()) < self.num_genes:
@@ -287,9 +291,7 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
     # If there aren't at least 2 tested genes in pool, can't create new gene
     elif len(self.valid_parents.items()) < 2:
-      self.current_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
-      self.epoch_iter -= 1
-      return None, False
+      return None, False   # Any changes made during this iteration will be undone
 
     # Check if max iterations for an epoch
     elif self.epoch_iter >= self.iterations_per_epoch:
@@ -303,14 +305,15 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
       return gene_name, True
 
     # Add most recent fitness's to list
+    self.past_n_fitness = np.roll(self.past_n_fitness, -1)
     for gene_key, gene in self.valid_parents.items():
       if gene['iteration'] in range(self.current_iter - self.plateau_sample_size, self.current_iter):
         ind = self.plateau_sample_size - (self.current_iter - gene['iteration'])
         self.past_n_fitness[ind] = gene['fitness']
     coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)  # Get linear regression coefficients
 
-    # Check for performance plateau (new epoch if plateau detected)
-    if coefs[0] < self.plateau_sensitivity:  # If slope is small enough
+    # Check for performance plateau (new epoch if plateau detected & past warmup phase)
+    if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.warmup:  # If slope is small enough
       # print(self.current_iter)
       self.start_new_epoch()
       new_gene = self.initial_gene()
@@ -338,6 +341,7 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
   # Begin a new epoch, and return the first gene of that epoch
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
+    self.mutation_rate = self.original_mutation_rate
     self.epoch_iter = 0
     self.past_n_fitness = (np.ones(self.plateau_sample_size) * -np.inf)
 
@@ -371,7 +375,7 @@ class Complex_Genetic_Algorithm(Genetic_Algorithm):
 
   # Penalty for being close to founders
   def founder_proximity_penalty(self, gene):
-    return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
+    return sum([np.dot(gene, founder_gene['gene'].T) for founder_gene in self.founders_pool.values()])
 
   # Full override of end_condition. Only end when max epochs reached
   def end_condition(self):

@@ -8,9 +8,9 @@ def plot_client_logs(run_dir, num_clients, ax=None):
     x = [gene_data['iteration'] for gene_data in log]
     y = [gene_data['fitness'] for gene_data in log]
     if ax is None:
-      plt.scatter(x, y)
+      plt.scatter(x, y, s=1)
     else:
-      ax.scatter(x, y)
+      ax.scatter(x, y, s=1)
 
   plt.title(f"'{run_dir}' Fitness vs. Iteration")
   plt.xlabel("Iteration")

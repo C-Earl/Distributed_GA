@@ -51,7 +51,7 @@ class Server_SLURM(Server):
     if call_type == 'run_client':
       cmd(f"sbatch {self.sbatch_script} --client_id={client_id} --run_name={self.run_name}")
     elif call_type == 'run_server':     # If true, means already on node, no need to make new node
-      alg_module_name = self.algorithm_path_.split('/')[-1][:-3]
+      alg_module_name = self.algorithm_path.split('/')[-1][:-3]
       alg = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
       self.server_callback(alg, **kwargs)
 
@@ -79,9 +79,9 @@ if __name__ == '__main__':
   sys.path.append(client_module_path_)
 
   # Create Algorithm and Client objects
-  alg_module_name = algorithm_path_.split('/')[-1][:-3]
+  alg_module_name_ = algorithm_path_.split('/')[-1][:-3]
   client_module_name = client_path_.split('/')[-1][:-3]
-  algorithm_ = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
+  algorithm_ = getattr(__import__(alg_module_name_, fromlist=[alg_module_name_]), algorithm_name_)
   client_ = getattr(__import__(client_module_name, fromlist=[client_module_name]), client_name_)
   all_args['algorithm'] = algorithm_
   all_args['client'] = client_

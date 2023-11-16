@@ -1,4 +1,4 @@
-from DGA.Algorithm import Complex_Genetic_Algorithm
+from DGA.Algorithm import Plateau_Genetic_Algorithm
 from DGA.Client import Client
 from DGA.Server import Server
 from DGA.Plotting import plot_client_logs
@@ -43,13 +43,13 @@ class Simple_Client(Client):                  # <--- Remember to inherit Client 
 #             can be accessed with self.name_of_kwarg.
 # # # # # # # # # # # # # # # # # # # # # #
 if __name__ == '__main__':
-  alg = Complex_Genetic_Algorithm(gene_shape=(vector_size,vector_size),
+  alg = Plateau_Genetic_Algorithm(gene_shape=(vector_size, vector_size),
                                   num_genes=100,
                                   mutation_rate=0.9,
                                   iterations_per_epoch=10_000,
                                   epochs=5,
                                   plateau_sensitivity=1e-3,
-                                  plateau_sample_size=3000,)
+                                  plateau_sample_size=3000, )
   Server(run_name="Complex_GA_Example",     # Name of run (run files saved in a folder with this name)
          algorithm=alg,           # Algorithm for optimizing your model
          client=Simple_Client(),          # Client class with your model
