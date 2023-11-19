@@ -22,6 +22,10 @@ class Pool(dict):
         del sub_pool[key]         # Since subsets, only delete if in subset
     super().__delitem__(key)
 
+  def extend(self, other: dict):
+    for key, value in other.items():
+      self[key] = value           # Add all items from other dict
+
 class Subset_Pool(Pool):
   def __init__(self, condition: callable):
     self.condition = condition          # Condition for subset

@@ -147,7 +147,7 @@ class Server:
     gene_data['fitness'] = fitness
     gene_data['test_state'] = 'tested'
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-    with portalocker.Lock(pool_lock_path, timeout=100) as _:
+    with portalocker.Lock(pool_lock_path, timeout=10) as _:
       write_gene_file(self.run_name, gene_name, gene_data)
       write_log(self.run_name, kwargs['model_id'], model.logger(fitness, iteration))
 

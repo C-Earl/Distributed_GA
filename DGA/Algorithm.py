@@ -77,11 +77,16 @@ class Genetic_Algorithm_Base:
     self.pool.add_subset_pool(self.valid_parents)
 
     # Load gene pool
+    self.pool.extend(self.load_gene_pool())
+
+  def load_gene_pool(self):
+    pool = {}
     for root, dirs, files in os.walk(self.pool_path):
       for file in files:
         file_name = file.split('.')[0]  # This will be unique hash of the gene
         gene = load_gene_file(self.run_name, file_name)
-        self.pool[file_name] = gene
+        pool[file_name] = gene
+    return pool
 
   # Create class vars with proper typing
   def make_class_vars(self, **kwargs):
@@ -375,7 +380,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
   # Penalty for being close to founders
   def founder_proximity_penalty(self, gene):
-    return sum([np.dot(gene, founder_gene['gene'].T) for founder_gene in self.founders_pool.values()])
+    return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
 
   # Full override of end_condition. Only end when max epochs reached
   def end_condition(self):
