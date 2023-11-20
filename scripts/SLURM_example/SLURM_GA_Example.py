@@ -17,6 +17,6 @@ if __name__ == '__main__':
                           iterations=100,)
   Server_SLURM(run_name="Simple_GA_Example", 
                algorithm=alg,
-               sbatch_script="run_model.sh",
+               sbatch_script="sbatch_script.sh",
                model=Simple_Model(),
                num_parallel_processes=5, )
