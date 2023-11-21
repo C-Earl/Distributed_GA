@@ -134,6 +134,14 @@ class Genetic_Algorithm_Base:
 
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
+  def __init__(self,
+               num_genes: int = -1,
+               gene_shape: Union[tuple, dict] = (-1,),
+               mutation_rate: float = -1.0,
+               iterations: int = -1,
+               **kwargs):
+    super().__init__(num_genes, gene_shape, mutation_rate, iterations, **kwargs)
+
   # Fetch a gene from the pool for testing. This function is a filter, checking that it is safe to create a new gene.
   # Handles pool-initialization logic, and ensures create_new_gene is only called when it's safe to do so (e.g. enough
   # genes in pool to make new gene).
@@ -288,8 +296,9 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
       while gene_name in self.pool.keys():  # Keep attempting until unique
         new_gene = self.initial_gene(**kwargs)
         gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+      self.pool[gene_name] = {'gene': new_gene,       # Add to pool
                               'fitness': None,
+                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
                               'test_state': 'being tested',
                               'iteration': self.current_iter}
       return gene_name, True
@@ -305,6 +314,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
       gene_name = get_pool_key(new_gene)
       self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
                               'fitness': None,
+                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
                               'test_state': 'being tested',
                               'iteration': self.current_iter}
       return gene_name, True
@@ -319,17 +329,17 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
     # Check for performance plateau (new epoch if plateau detected & past warmup phase)
     if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.warmup:  # If slope is small enough
-      # print(self.current_iter)
       self.start_new_epoch()
       new_gene = self.initial_gene()
       gene_name = get_pool_key(new_gene)
       self.pool[gene_name] = {'gene': new_gene,  # Add to pool obj
                               'fitness': None,
+                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
                               'test_state': 'being tested',
                               'iteration': self.current_iter}
       return gene_name, True
 
-    # Otherwise, create a new offspring
+    # Otherwise, breed new offspring
     else:
       new_gene = self.create_new_gene(**kwargs)
       gene_name = get_pool_key(new_gene)    # np.array alone cannot be used as key in dict
@@ -339,9 +349,42 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
       self.remove_weak()
       self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
                               'fitness': None,
+                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
                               'test_state': 'being tested',
                               'iteration': self.current_iter}
       return gene_name, True
+
+  # Create new gene from current state of pool
+  # - Called by fetch_gene to create new genes
+  def create_new_gene(self, **kwargs):
+    p1, p2 = self.select_parents()  # Select parents for reproduction
+    new_gene = self.crossover(p1, p2)  # Generate offspring with crossover
+    new_gene = self.mutate(new_gene)  # Random mutation
+    return new_gene
+
+  # Remove worst gene from pool
+  def remove_weak(self):
+    sorted_parents = sorted(self.valid_parents.items(),  # Only use tested genes
+                            key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)  # Sort by fitness
+    worst_gene = sorted_parents[-1][0]
+    del self.pool[worst_gene]  # Remove from pool
+
+  # Select parents for reproduction using weighted probabilities based on fitness. Higher fitness -> higher probability of selection
+  def select_parents(self) -> tuple:
+    fitness_scores = [gene_data['fitness'] + gene_data['founder_proximity_penalty'] for _, gene_data in self.valid_parents.items()]
+    normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
+    probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
+    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)  # Select 2 parents
+    sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)
+    return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
+
+  # Crossover p1 and p2 genes
+  def crossover(self, p1, p2, gene_shape=None) -> dict:
+    return super().crossover(p1, p2, gene_shape)
+
+  # Mutate at random point in gene
+  def mutate(self, gene, gene_shape=None) -> dict:
+    return super().mutate(gene, gene_shape)
 
   # Begin a new epoch, and return the first gene of that epoch
   def start_new_epoch(self, **kwargs):
@@ -375,12 +418,14 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     del self.pool[worst_gene]  # Remove from pool obj
 
   # Diversity based on cumulative Euclidean distance between gene and other genes in pool
-  def get_diversity(self, pool: dict):
-    return sum([np.linalg.norm(gene - other_gene) for gene in pool.values() for other_gene in pool.values()])
+  # def get_diversity(self, pool: dict):
+  #   return sum([np.linalg.norm(gene - other_gene) for gene in pool.values() for other_gene in pool.values()])
 
   # Penalty for being close to founders
   def founder_proximity_penalty(self, gene):
-    return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
+    # return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
+    penalty = sum([np.corrcoef(gene, founder_gene['gene'])[0, 1] for founder_gene in self.founders_pool.values()])
+    return penalty
 
   # Full override of end_condition. Only end when max epochs reached
   def end_condition(self):
