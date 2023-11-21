@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --signal=B:USR1@30
 #SBATCH --output=logs_cpu/%x.%j.out
-##SBATCH --error=error_gpu/R-%x.%j.err
+##SBATCH --error=error_cpu/R-%x.%j.err
 #SBATCH -p preempt
 
 # trap at https://hpc-discourse.usc.edu/t/signalling-a-job-before-time-limit-is-reached/314/3

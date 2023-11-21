@@ -14,8 +14,8 @@ class Server_SLURM(Server):
                num_parallel_processes: int, sbatch_script: str, call_type: str = 'init',
                data_path: str = None, log_pool: int = -1, **kwargs):
     self.sbatch_script = sbatch_script
-    if call_type == 'init':
-      self.sbatch_script = os.path.abspath(__file__)  # Need abs path for future calls (original call dir won't be on sys.path anymore)
+    # if call_type == 'init':
+    #   self.sbatch_script = os.path.abspath(__file__)  # Need abs path for future calls (original call dir won't be on sys.path anymore)
     super().__init__(run_name, algorithm, model, num_parallel_processes, call_type, data_path, log_pool, **kwargs)
 
   # Save args for model, and make sbatch calls
