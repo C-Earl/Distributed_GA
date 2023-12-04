@@ -22,7 +22,7 @@ trap 'echo signal recieved!; kill "${PID}"; wait "${PID}"; handler' USR1 SIGINT 
 echo "Job started!"
 
 # run python script
-python3 Server_SLURM.py $1 $2 
+python3 $3 $1 $2
 
 
 echo "Job ended!"
