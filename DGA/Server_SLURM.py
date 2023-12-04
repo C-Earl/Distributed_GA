@@ -44,7 +44,7 @@ class Server_SLURM(Server):
     if call_type == 'run_model':
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
       print(f"sbatch {self.sbatch_script} --model_id={model_id} --run_name={self.run_name} --server_path={server_path_}")
-      cmd(f"sbatch {self.sbatch_script} --model_id={model_id} --run_name={self.run_name}")
+      cmd(f"sbatch {self.sbatch_script} {model_id} {self.run_name} {server_path_}")
     elif call_type == 'run_server':     # If true, means already on node, no need to make new node
       alg_module_name = self.algorithm_path_.split('/')[-1][:-3]
       alg = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
