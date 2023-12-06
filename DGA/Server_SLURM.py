@@ -48,8 +48,10 @@ class Server_SLURM(Server):
       print(f"sbatch {self.sbatch_script} --model_id={model_id} --run_name={self.run_name} --server_path={server_path_}")
       cmd(f"sbatch {self.sbatch_script} {model_id} {self.run_name} {server_path_}")
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
-      alg_module_name = self.algorithm_path_.split('/')[-1][:-3]
+      alg_module_name = self.algorithm_path.split('/')[-1][:-3]
       alg = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
+      kwargs['gene_name'] = gene_name
+      kwargs['model_id'] = model_id
       print(f"Running server callback for {gene_name}")
       self.server_callback(alg, **kwargs)
 
@@ -86,7 +88,7 @@ if __name__ == '__main__':
 
   # Run server protocol with bash kwargs
   try:
-    Server(**all_args)
+    Server_SLURM(**all_args)
   except Exception as e:
     write_error_log(all_args['run_name'], all_args)
     raise e
