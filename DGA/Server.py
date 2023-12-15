@@ -131,7 +131,8 @@ class Server:
   def run_model(self, model_type: type, **kwargs):
     # Setup model
     gene_name = kwargs['gene_name']
-    gene_data = load_gene_file(self.run_name, gene_name)
+    # model_runtime_args = kwargs['model_runtime_args']
+    gene_data = load_gene_file(self.run_name, gene_name)      # All gene info (inc. fitness, etc.)
     model = model_type(**self.model_args)
 
     # Load data using file locks (presumably training data)
@@ -140,7 +141,8 @@ class Server:
       model.load_data()
 
     # Test gene
-    fitness = model.run(gene_data['gene'], **kwargs)
+    runtime_args = gene_data['runtime_args'] if 'runtime_args' in gene_data else {}
+    fitness = model.run(gene_data['gene'], **runtime_args, **kwargs)
 
     # Return fitness (by writing to files)
     iteration = gene_data['iteration']

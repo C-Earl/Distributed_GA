@@ -266,9 +266,18 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
   # - epochs: Max number of epochs to run before stopping
   # - Note: iterations is not used for logic in this algorithm (but still needed for constructor).
   #         replaced with iterations_per_epoch
-  def __init__(self, num_genes: int, gene_shape: tuple | dict, mutation_rate: float, mutation_decay: float,
-               plateau_sensitivity: float, plateau_sample_size: int, iterations_per_epoch: int,
-               epochs: int, warmup: int, past_n_fitness: list = None, founders_pool: dict = None, **kwargs):
+  def __init__(self,
+               num_genes: int,
+               gene_shape: tuple | dict,
+               mutation_rate: float,
+               mutation_decay: float,
+               plateau_sensitivity: float,
+               plateau_sample_size: int,
+               iterations_per_epoch: int,
+               epochs: int, warmup: int,
+               past_n_fitness: list = None,
+               founders_pool: dict = None,
+               **kwargs):
     super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
     self.mutation_decay = mutation_decay
     self.plateau_sensitivity = plateau_sensitivity
@@ -394,7 +403,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     self.past_n_fitness = (np.ones(self.plateau_sample_size) * -np.inf)
 
     # Move top scoring genes to founders pool
-    sorted_gene_fitness = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
+    sorted_gene_fitness = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)
     top_gene_key, top_gene_data = sorted_gene_fitness[0]
     while top_gene_key in self.founders_pool.keys():      # Ensure no duplicates
       sorted_gene_fitness = sorted_gene_fitness[1:]
@@ -422,10 +431,10 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
   #   return sum([np.linalg.norm(gene - other_gene) for gene in pool.values() for other_gene in pool.values()])
 
   # Penalty for being close to founders
+  # Return positive L2 distance between gene and all genes in founders pool
+  # TODO: This doesn't work if fitness expected to go > 0 bc penalty is always positive
   def founder_proximity_penalty(self, gene):
-    # return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
-    penalty = sum([np.corrcoef(gene, founder_gene['gene'])[0, 1] for founder_gene in self.founders_pool.values()])
-    return penalty
+    return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
 
   # Full override of end_condition. Only end when max epochs reached
   def end_condition(self):
