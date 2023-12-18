@@ -16,7 +16,6 @@ def consistent_hasher(x):
   b = bytes(str(x), 'utf-8')
   return hashlib.sha256(b).hexdigest()  # Get the hexadecimal representation of the hash value
 
-
 # Takes np and transforms into tuple (makes it hashable)
 def hashable_nparray(gene: np.ndarray):
   if gene.ndim == 0:  # Scalar value
@@ -161,7 +160,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       return gene_name, True
 
     # If there aren't at least 2 genes in pool, can't create new gene
-    elif len(self.pool.items()) < 2:
+    elif len(self.valid_parents.items()) < 2:
       self.current_iter -= 1    # No gene created, so don't increment (cancels out prior += 1)
       return None, False
 
@@ -432,7 +431,6 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
   # Penalty for being close to founders
   # Return positive L2 distance between gene and all genes in founders pool
-  # TODO: This doesn't work if fitness expected to go > 0 bc penalty is always positive
   def founder_proximity_penalty(self, gene):
     return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
 
