@@ -1,112 +1,26 @@
-# Abstract Implementation:
-
-This section will show how the model is conceptualized; however, note that the code is under development and the actual code implementation are somewhat different. 
+# Abstract Implementation of Server:
+This diagram gives an abstract overview of what data is passed between Server and Model/Genetic-Algorithm, and how consistency is maintained with the asynchronous processes.
 
 ![Diagram of DGA](/diagrams/DGA_diagram_0.png)
 
 ### Step 0: 
-> From a starting file, a Server object is initialized by specifying a Model to train and a Genetic Algorithm to optimize it. From here, the Server will begin the run by initializing the gene pool (Step 1).
+> From a starting file, a Server object is initialized by specifying a Model to train and a Genetic Algorithm to optimize it. From here, the Server will begin the run by initializing the gene pool 
 
 ### Step 1:  
-> Given the state of the gene pool, the Genetic Algorithm applies logic to prune weak genes and generate new ones. A simple example is removing the gene with the lowest fitness and adding a new gene in its place. 
-On initialization, the Current Gene Pool will be empty, so special logic is used to generate genes from scratch.
+> The Server passes a copy of the current gene pool to the genetic algorithm for evaluation, and expects to be returned a new gene. Given the state of the gene pool, the Genetic Algorithm applies logic to prune weak genes and generate a new ones.
+The algorithm will make direct changes to its given copy of the gene pool.
 
 ### Step 2: 
-> After the algorithm has finished manipulating the pool, exactly one New Gene should be generated and returned. This New Gene should already be in the Updated Pool, but returning the name helps the Server identify the New Gene that was just made so it can send it to a parallel subprocess for testing (Step 3). 
+> After the algorithm has finished manipulating the pool, a New Gene should be generated and returned, along with the Updated Gene Pool. New Gene should already be in the Updated Pool, but the name is needed for the Server to identify which gene was just made. From here, the Server updates the file system with the changes made by the algorithm. This is mainly updating the gene pool, but is also for updating algorithm state variables (like the current iteration). You can find the algorithm state variable file in your runs, they are always named 'RUN_STATUS.json'.
 
 ### Step 3: 
-> **At this stage, a subprocess on another CPU/core is called to test the New Gene** on the Model. This will run in parallel to other subprocess’s running different genes on the same Model. The only requirement for the Model is to return a numeric fitness value back to the Server (Step 4).
+> **At this stage, a subprocess on another CPU/core is called to test the New Gene**. This will run in parallel to other subprocess’s running different genes on the same Model. The Model will return a fitness after testing, but note that there is no synchronization step here. The Server will not wait on any subprocess before assigning another subprocess a new gene. 
 
 ### Step 4: 
-> Once tested, the New Gene Fitness value is returned to the server. The Gene Pool is updated with the New Gene Fitness, and thus the state of the pool is updated. This new Current Gene Pool is sent back to the Genetic Algorithm for adjustment (Back to Step 1!)
+> One the fitness is recieed, the file system gene pool is updated with the New Gene Fitness. This new gene pool is then sent back to the Genetic Algorithm for adjustment, and the process repeats.
 
 
-This repeats until the Genetic Algorithm breaks and exits when an end condition is met. An example for an end condition is setting a maximum number of genes to be tested (for Genetic_Algorithm, this is the ‘iterations’ arg). 
-
-
-
-# Code Implementation:
-This section will go in more detail about how the code is organized to implement the abstract concept. 
-
-The main files for the Server, Genetic Algorithm, and Model are found in “/Distributed_GA/DGA/”. I’ll describe each of the three parts below.
-
-### Model:
-"Model" is the name of the wrapper object where you will define how your model will be tested. **See the ```Simple_GA_Example.py``` in the ```scripts/GA_Example``` scripts folder for implementation details**. 
-
-### Genetic Algorithm:
-The Genetic Algorithm handles how new genes are made and the gene pool modified. The most important function is by far ```fetch_gene```.
-
-
-#### fetch_gene()
-Function responsible for generating the 'New Gene' and a status-message which indicates if a new gene was successfully made (the boolean next to ```gene_name```). **The logic inside this function dictates how the algorithm should behave given the state of the pool**. For organizational reasons, the logic for reproducing New Gene's is in a separate function called create_new_gene(). See below for the shortened/simplified implementation of the ```fetch_gene()``` method found in the default ```Genetic_Algorithm``` class:
-
-```Python
-def fetch_gene(self, **kwargs) -> tuple:
-  self.current_iter += 1    # Increment iteration
-
-  # If pool is unitialized, add new gene
-  if len(self.pool.items()) < self.num_genes:
-    self.pool[gene_name] = {'gene': new_gene,
-                            'fitness': None,
-                            'test_state': 'being tested',
-                            'iteration': self.current_iter}
-      return gene_name, True
-
-  # If there aren't at least 2 genes in pool, can't create new gene
-  elif len(self.pool.items()) < 2:
-    self.current_iter -= 1
-    return None, False
-
-  # Otherwise, create a new offspring
-  else:
-    new_gene = self.create_new_gene(**kwargs)
-
-    # Remove worst gene(s) from the pool
-    self.remove_weak()
-    self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
-                            'fitness': None,
-                            'test_state': 'being tested',
-                            'iteration': self.current_iter}
-    return gene_name, True
-```
-
-Note: This is currently still an unstable function to modify! This means modifications to this function *could* disrupt the entire run (breaking file-io stuff mainly). *It won't break your computer*, but you might come across unusual errors.
-
-#### create_new_gene()
-fetch_gene() should act as a switch which determines how the genetic alg. will behave given the current state of the pool. create_new_gene() is used as a tool to generate the New Gene. Here is a code simplified code snippet which shows how it is used in the default ```Genetic_Algorithm``` class. 
-
-```Python
-def fetch_gene(self, **kwargs) -> tuple:
-  self.current_iter += 1    # Increment iteration
-
-  # If pool is unitialized, add new gene
-  if len(self.pool.items()) < self.num_genes:
-    ...
-
-  # If there aren't at least 2 genes in pool, can't create new gene
-  elif len(self.pool.items()) < 2:
-    ...
-
-  # Otherwise, create a new offspring
-  else:
-    new_gene = self.create_new_gene(**kwargs)
-
-    # Remove worst gene(s) from the pool
-    self.remove_weak()
-    self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
-                            'fitness': None,
-                            'test_state': 'being tested',
-                            'iteration': self.current_iter}
-    return gene_name, True
-
-# Create new gene from current state of pool
-# - Called by fetch_gene to create new genes
-def create_new_gene(self, **kwargs):
-  p1, p2 = self.select_parents()        # Select parents from pool
-  new_gene = self.crossover(p1, p2)     # Generate offspring w/ crossover
-  new_gene = self.mutate(new_gene)      # Random mutation
-  return new_gene
-```
+This goes until the Genetic Algorithm breaks when an end condition is met. An example for an end condition is setting a maximum number of genes to be tested (for Genetic_Algorithm, this is the ‘iterations’ arg). 
 
 #### Other functions + How to manipulate Gene Pool & Genes
 
