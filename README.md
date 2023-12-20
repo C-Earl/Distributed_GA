@@ -25,11 +25,11 @@ Creating a virtual environment through other IDEs should be similar to the VSCod
 
 # How to run example
 To see examples, navigate to the ```scripts``` folder. 
-- ```simple_example```: Optimizes a size 10 array towards the origin (array of all 0's). One version ("Simple_GA_Example.py") is a generic genetic algorithm while the other ("Complex_GA_Example.py") is a more sophisticated algorithm (**WIP**; not finished implementing)
+- ```GA_examples```: Optimizes a vector matching task. One version ("Simple_GA_Example.py") is a generic genetic algorithm while the other ("Complex_GA_Example.py") is a more sophisticated algorithm called the 'Plateau' algorithm
 - ```ANN_example```: Optimizes simple Artificial Neural Net for MNIST classification. You will need to install [PyTorch](https://pytorch.org/) on your system to run this model.
 - ```SLURM_example```: Example of DGA utilizing the SLURM operating system. Works by calling nodes to test genes on a model in parallel.
 
-I reccomend starting with the simplest example in ```simple_example```. Open the file "Simple_GA_Example.py" and simply run the file to start the algorithm. 
+I reccomend starting with the simplest example in ```GA_examples```. Open the file "Simple_GA_Example.py" and simply run the file to start the algorithm. 
 
 To see if the algorithm is running, open your process manager. While the algorithm is running, you should see ```num_parallel_processes``` Python processes in your manager (you can find this arg. value near the bottom of the file). These are the parallel processes testing the example model and generated genes. They will automatically call new processes to test the next generation of genes until the end condition is met (it will test ```iterations``` number of genes). **You will know the run has finished when all the Python processes have disappeared from your process manager.**
 
@@ -45,3 +45,10 @@ Gene: 18aksbnais...             Fitness: -0.7019288379001982
 ```
 
 Your final values may look a bit as there is some stochasticity
+
+# Additional Documentation
+**code_docs.pdf**
+>Contains in depth info about Server, Model, and Algorithm objects and how they are used. See here for any info about how to use the libraries various objects two pre-packaged algorithms
+
+**backend_docs.md**
+>A more in depth look at how to program your own genetic algorithms and understanding how the Server executes.
