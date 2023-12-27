@@ -23,6 +23,13 @@ def evaluate_policy(policy, eval_episodes=10):
   print ("---------------------------------------")
   return avg_reward
 
+## We create a new folder directory in which the final results (videos of the agent) will be populated
+def mkdir(base, name):
+    path = os.path.join(base, name)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
+
 ## We set the parameters
 env_name = "Walker2d-v4" # Name of a environment (set it to any Continous environment you want)
 seed = 0 # Random seed number
@@ -51,7 +58,7 @@ if save_models and not os.path.exists("./pytorch_models"):
   os.makedirs("./pytorch_models")
 
 ## We create the PyBullet environment
-env = gym.make(env_name, healthy_z_range=(2.0, 2.0), terminate_when_unhealthy=True, render_mode='human')
+env = gym.make(env_name, healthy_z_range=(0.8, 2.0), terminate_when_unhealthy=True)
 
 ## We set seeds and we get the necessary information on the states and actions in the chosen environment
 torch.manual_seed(seed)
@@ -69,12 +76,6 @@ replay_buffer = ReplayBuffer()
 ## We define a list where all the evaluation results over 10 episodes are stored
 evaluations = [evaluate_policy(policy)]
 
-## We create a new folder directory in which the final results (videos of the agent) will be populated
-def mkdir(base, name):
-    path = os.path.join(base, name)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return path
 work_dir = mkdir('exp', 'brs')
 monitor_dir = mkdir(work_dir, 'monitor')
 max_episode_steps = env._max_episode_steps
@@ -131,8 +132,7 @@ while total_timesteps < max_timesteps:
   
   # The agent performs the action in the environment, then reaches the next state and receives the reward
   new_obs, reward, term, done, _ = env.step(action)
-  done = term & done
-  if term:
+  if term:    # if the agent falls, we terminate the episode
     done = True
   
   # We check if the episode is done

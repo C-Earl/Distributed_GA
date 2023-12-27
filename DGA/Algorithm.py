@@ -293,11 +293,13 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
   # Additional checks made to ensure new gene is safe to create
   # - Must use super().fetch_gene to ensure create_new_gene is called and current_iter is iterated
   def fetch_gene(self, **kwargs):
-    self.current_iter += 1  # Increment total iteration
-    self.epoch_iter += 1    # Increment iteration for current epoch
-    self.mutation_rate *= self.mutation_decay  # Decay mutation rate
+    self.current_iter += 1  # Total iteration
+    self.epoch_iter += 1    # Iteration for current epoch
+    org_decay = self.mutation_decay # Save original decay rate
+    self.mutation_rate *= self.mutation_decay
 
-    # If pool is unitialized, add new gene
+    # If pool is unitialized
+    # Initialize new gene, add to pool, and return
     if len(self.pool.items()) < self.num_genes:
       new_gene = self.initial_gene(**kwargs)
       gene_name = get_pool_key(new_gene)  # np.array alone cannot be used as key in dict
@@ -312,30 +314,36 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
       return gene_name, True
 
     # If there aren't at least 2 tested genes in pool, can't create new gene
+    # Return no gene and unsuccessful flag (False)
     elif len(self.valid_parents.items()) < 2:
+      self.current_iter -= 1
+      self.epoch_iter -= 1
+      self.mutation_decay = org_decay
       return None, False   # Any changes made during this iteration will be undone
 
     # Check if max iterations for an epoch
+    # Start new epoch and initialize new gene
     elif self.epoch_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
       new_gene = self.initial_gene()
       gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
+      self.pool[gene_name] = {'gene': new_gene,
                               'fitness': None,
                               'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
                               'test_state': 'being tested',
                               'iteration': self.current_iter}
       return gene_name, True
 
-    # Add most recent fitness's to list
+    ## Add most recent fitness's to list ##
+    # Shift frame for past_n_fitness & add any newly tested genes
     self.past_n_fitness = np.roll(self.past_n_fitness, -1)
     for gene_key, gene in self.valid_parents.items():
       if gene['iteration'] in range(self.current_iter - self.plateau_sample_size, self.current_iter):
         ind = self.plateau_sample_size - (self.current_iter - gene['iteration'])
         self.past_n_fitness[ind] = gene['fitness']
-    coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)  # Get linear regression coefficients
 
     # Check for performance plateau (new epoch if plateau detected & past warmup phase)
+    coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)
     if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.warmup:  # If slope is small enough
       self.start_new_epoch()
       new_gene = self.initial_gene()
@@ -347,7 +355,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
                               'iteration': self.current_iter}
       return gene_name, True
 
-    # Otherwise, breed new offspring
+    # Otherwise, breed new offspring & return
     else:
       new_gene = self.create_new_gene(**kwargs)
       gene_name = get_pool_key(new_gene)    # np.array alone cannot be used as key in dict
@@ -419,7 +427,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     sorted_parents = sorted(    # Sort by fitness + penalty
         self.valid_parents.items(),
         key=lambda gene_kv:
-        gene_kv[1]['fitness'] + self.founder_proximity_penalty(gene_kv[1]['gene']),
+        gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'],
         reverse=True
     )
     worst_gene = sorted_parents[-1][0]

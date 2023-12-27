@@ -2,6 +2,7 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 import torch
+from torchsummary import summary
 
 ## Step 1: We initialize the Experience Replay memory
 class ReplayBuffer(object):
@@ -81,12 +82,13 @@ class Critic(nn.Module):
 
 ## Steps 4 to 15: Training Process
 # Selecting the device (CPU or GPU)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Building the whole Training Process into a class
 class TD3(object):
   
-  def __init__(self, state_dim, action_dim, max_action):
+  def __init__(self, state_dim, action_dim, max_action, device):
+    self.device = device
     self.actor = Actor(state_dim, action_dim, max_action).to(device)
     self.actor_target = Actor(state_dim, action_dim, max_action).to(device)
     self.actor_target.load_state_dict(self.actor.state_dict())
@@ -98,7 +100,7 @@ class TD3(object):
     self.max_action = max_action
 
   def select_action(self, state):
-    state = torch.Tensor(state.reshape(1, -1)).to(device)
+    state = torch.Tensor(state.reshape(1, -1)).to(self.device)
     return self.actor(state).cpu().data.numpy().flatten()
 
   def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
@@ -107,17 +109,17 @@ class TD3(object):
       
       # Step 4: We sample a batch of transitions (s, s’, a, r) from the memory
       batch_states, batch_next_states, batch_actions, batch_rewards, batch_dones = replay_buffer.sample(batch_size)
-      state = torch.Tensor(batch_states).to(device)
-      next_state = torch.Tensor(batch_next_states).to(device)
-      action = torch.Tensor(batch_actions).to(device)
-      reward = torch.Tensor(batch_rewards).to(device)
-      done = torch.Tensor(batch_dones).to(device)
+      state = torch.Tensor(batch_states).to(self.device)
+      next_state = torch.Tensor(batch_next_states).to(self.device)
+      action = torch.Tensor(batch_actions).to(self.device)
+      reward = torch.Tensor(batch_rewards).to(self.device)
+      done = torch.Tensor(batch_dones).to(self.device)
       
       # Step 5: From the next state s’, the Actor target plays the next action a’
       next_action = self.actor_target(next_state)
       
       # Step 6: We add Gaussian noise to this next action a’ and we clamp it in a range of values supported by the environment
-      noise = torch.Tensor(batch_actions).data.normal_(0, policy_noise).to(device)
+      noise = torch.Tensor(batch_actions).data.normal_(0, policy_noise).to(self.device)
       noise = noise.clamp(-noise_clip, noise_clip)
       next_action = (next_action + noise).clamp(-self.max_action, self.max_action)
       
@@ -165,4 +167,8 @@ class TD3(object):
   def load(self, filename, directory):
     self.actor.load_state_dict(torch.load('%s/%s_actor.pth' % (directory, filename)))
     self.critic.load_state_dict(torch.load('%s/%s_critic.pth' % (directory, filename)))
+    print(self.actor)
 
+  def load_from_params(self, actor_params, critic_params):
+    self.actor.load_state_dict(actor_params)
+    self.critic.load_state_dict(critic_params)

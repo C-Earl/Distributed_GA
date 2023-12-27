@@ -90,7 +90,7 @@ if __name__ == '__main__':
                                  num_genes=10,
                                  mutation_rate=1,
                                  mutation_decay=.9999,
-                                 iterations_per_epoch=25_000,
+                                 iterations_per_epoch=1_000,
                                  epochs=num_epochs,
                                  plateau_sensitivity=5e-4,
                                  plateau_sample_size=2000,
