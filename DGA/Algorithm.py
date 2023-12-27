@@ -387,12 +387,13 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
   # Select parents for reproduction using weighted probabilities based on fitness. Higher fitness -> higher probability of selection
   def select_parents(self) -> tuple:
-    fitness_scores = [gene_data['fitness'] + gene_data['founder_proximity_penalty'] for _, gene_data in self.valid_parents.items()]
+    gene_list = list(self.valid_parents.items())
+    fitness_scores = [gene_data['fitness'] + gene_data['founder_proximity_penalty'] for _, gene_data in gene_list]
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
     probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
     p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)  # Select 2 parents
-    sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)
-    return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
+    # sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)
+    return gene_list[p1_i][1]['gene'], gene_list[p2_i][1]['gene']
 
   # Crossover p1 and p2 genes
   def crossover(self, p1, p2, gene_shape=None) -> dict:
