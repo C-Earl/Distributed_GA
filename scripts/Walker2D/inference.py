@@ -1,5 +1,5 @@
 import torch
-from classes import TD3
+from DDPG import TD3
 import numpy as np
 import gymnasium as gym
 from gymnasium.wrappers.monitoring.video_recorder import VideoRecorder

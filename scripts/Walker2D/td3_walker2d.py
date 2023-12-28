@@ -5,7 +5,7 @@ import gymnasium as gym
 import torch
 from gymnasium import wrappers
 
-from classes import ReplayBuffer, Actor, Critic, TD3
+from DDPG import ReplayBuffer, Actor, Critic, TD3
 
 ## We make a function that evaluates the policy by calculating its average reward over 10 episodes
 def evaluate_policy(policy, eval_episodes=10):

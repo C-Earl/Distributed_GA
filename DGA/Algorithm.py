@@ -392,7 +392,6 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
     probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
     p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)  # Select 2 parents
-    # sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)
     return gene_list[p1_i][1]['gene'], gene_list[p2_i][1]['gene']
 
   # Crossover p1 and p2 genes
