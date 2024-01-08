@@ -26,6 +26,14 @@ class Pool(dict):
     for key, value in other.items():
       self[key] = value           # Add all items from other dict
 
+  def update_subpools(self):
+    for sub_pool in self.subset_pools:
+      for key, value in self.items():
+        if not sub_pool.condition(key, value):
+          del sub_pool[key]         # If condition no longer met, delete from subset
+        elif sub_pool.condition(key, value):
+          sub_pool[key] = value     # Adjust sub pools to match change
+
 class Subset_Pool(Pool):
   def __init__(self, condition: callable):
     self.condition = condition          # Condition for subset

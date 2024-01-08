@@ -72,7 +72,7 @@ class Genetic_Algorithm_Base:
     self.make_class_vars(**kwargs)  # Initialize other vars (from inheriting classes)
     self.pool_path = file_path(self.run_name, POOL_DIR)
     self.pool = Pool()        # Subset_Pool() will have all elements of Pool() meeting condition
-    self.valid_parents = Subset_Pool(condition=lambda key, gene: gene['test_state'] == 'tested')
+    self.valid_parents = Subset_Pool(condition=lambda key, params: params.tested())
     self.pool.add_subset_pool(self.valid_parents)
 
     # Load gene pool

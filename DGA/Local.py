@@ -44,8 +44,11 @@ class Synchronized:
 
       # Generate & test gene (+ update pool)
       gene_name, _ = self.algorithm.fetch_gene()
-      fitness = self.model.run(self.pool[gene_name]['gene'])
-      self.pool[gene_name] = self.pool[gene_name] | {'fitness': fitness, 'test_state': 'tested'}
+      fitness = self.model.run(self.pool[gene_name].values)
+      # self.pool[gene_name] = self.pool[gene_name] | {'fitness': fitness, 'test_state': 'tested'}
+      self.pool[gene_name].set_fitness(fitness)
+      self.pool[gene_name].set_tested(True)
+      self.pool.update_subpools()   # Needed to manually update 'valid_parents' pool
 
       # Log
       self.log.append(self.model.logger(fitness, self.iteration))
