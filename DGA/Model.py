@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from DGA.Gene import Parameters
 from DGA.File_IO import load_gene_file
 import numpy as np
 import time
@@ -26,6 +27,7 @@ class Model():
   @abstractmethod
   def run(self, gene, **kwargs) -> float:
     pass
+
 
 class Testing_Model(Model):
   def __init__(self,
@@ -55,10 +57,11 @@ class Testing_Model(Model):
           self.target_vectors.append(np.random.normal(loc=location, scale=3, size=vector_size))
 
   # Return distance from closest target vector
-  def run(self, gene, **kwargs) -> float:
+  def run(self, params: Parameters, **kwargs) -> float:
+    param = params.values()[0]    # Only need 1 param, rest ignored
     smallest_diff = np.inf
     for i, targ in enumerate(self.target_vectors):
-      diff = np.linalg.norm(gene.flatten() - targ.flatten())
+      diff = np.linalg.norm(param.flatten() - targ.flatten())
       if diff < smallest_diff:
         smallest_diff = diff
     return -smallest_diff

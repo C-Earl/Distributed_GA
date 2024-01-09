@@ -43,8 +43,8 @@ class Synchronized:
       self.iteration += 1
 
       # Generate & test gene (+ update pool)
-      gene_name, _ = self.algorithm.fetch_gene()
-      fitness = self.model.run(self.pool[gene_name].values)
+      gene_name, _ = self.algorithm.fetch_params()
+      fitness = self.model.run(self.pool[gene_name])
       # self.pool[gene_name] = self.pool[gene_name] | {'fitness': fitness, 'test_state': 'tested'}
       self.pool[gene_name].set_fitness(fitness)
       self.pool[gene_name].set_tested(True)

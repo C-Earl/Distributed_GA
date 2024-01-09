@@ -135,7 +135,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
 
   def __init__(self,
                num_genes: int = -1,
-               gene_shape: Union[tuple, dict] = (-1,),
+               gene_shape: tuple | dict = (-1,),
                mutation_rate: float = -1.0,
                iterations: int = -1,
                **kwargs):
