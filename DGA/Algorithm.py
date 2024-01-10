@@ -248,7 +248,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
                warmup: int,
                plateau_sample_size: int,
                mutation_decay: float = 1,
-               plateau_sensitivity: float = 5e-4,
+               plateau_sensitivity: float = 5e-5,
                num_parents: int = 2,
                past_n_fitness: list = None,
                founders_pool: dict = None,
@@ -272,9 +272,11 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     # Initialize new params, add to pool, and return
     if len(self.pool.items()) < self.num_params:
       new_params = self.spawn(self.current_iter)
+      new_params.set_attributes(founder_proximity_penalty=self.founder_proximity_penalty(new_params))
       params_name = get_pool_key(new_params)  # np.array alone cannot be used as key in dict
       while params_name in self.pool.keys():  # Keep attempting until unique
         new_params = self.spawn(self.current_iter)
+        new_params.set_attributes(founder_proximity_penalty=self.founder_proximity_penalty(new_params))
         params_name = get_pool_key(new_params)
       self.pool[params_name] = new_params
       return params_name, True
@@ -291,6 +293,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     elif self.epoch_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
       new_params = self.spawn(self.current_iter)
+      new_params.set_attributes(founder_proximity_penalty=self.founder_proximity_penalty(new_params))
       params_name = get_pool_key(new_params)
       self.pool[params_name] = new_params
       return params_name, True
@@ -308,6 +311,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.warmup:  # If slope is small enough
       self.start_new_epoch()
       new_params = self.spawn(self.current_iter)
+      new_params.set_attributes(founder_proximity_penalty=self.founder_proximity_penalty(new_params))
       params_name = get_pool_key(new_params)
       self.pool[params_name] = new_params
       return params_name, True
@@ -323,6 +327,44 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
       self.pool[params_name] = new_params
       return params_name, True
 
+  # Breed new offspring with parents selected from pool
+  # Inputs: current iteration
+  # Outputs: new Parameters (new offspring)
+  def breed(self, iteration: int) -> Parameters:
+    return super().breed(iteration)
+
+  # Create initial Parameters to populate pool
+  # Inputs: current iteration, user-specific keyword args
+  # Outputs: new Parameters
+  def spawn(self, iteration: int, **kwargs) -> Parameters:
+    return super().spawn(iteration, **kwargs)
+
+  # Removes Parameters with lowest fitness from pool
+  # Inputs: None
+  # Outputs: None
+  def trim_pool(self) -> None:
+    super().trim_pool()
+
+  # Select parents (for breeding) from pool based on fitness
+  # Inputs: None
+  # Outputs: list of Parameters (self.num_parents long)
+  def select_parents(self) -> list[Parameters]:
+    return super().select_parents()
+
+  # Crossover parents to create offspring (according to user provided Genome)
+  # Inputs: list of Parameters (parents), current iteration
+  # Outputs: new Parameters (offspring)
+  def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
+    new_params = super().crossover(parents, iteration)
+    new_params.set_attributes(founder_proximity_penalty=self.founder_proximity_penalty(new_params))
+    return new_params
+
+  # Mutate Parameters (according to user provided Genome)
+  # Inputs: Parameters
+  # Outputs: Parameters (same object, mutated)
+  def mutate(self, params: Parameters) -> Parameters:
+    return super().mutate(params)
+
   # Begin a new epoch, and return the first params of that epoch
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
@@ -330,7 +372,8 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     self.past_n_fitness = (np.ones(self.plateau_sample_size) * -np.inf)
 
     # Move top scoring paramss to founders pool
-    sorted_params_fitness = sorted(self.valid_parents.items(), key=lambda params_kv: params_kv[1].fitness + params_kv.founder_proximity_penalty, reverse=True)
+    sorted_params_fitness = sorted(self.valid_parents.items(),
+                     key=lambda params_kv: params_kv[1].fitness + params_kv[1].founder_proximity_penalty, reverse=True)
     top_params_key, top_params_data = sorted_params_fitness[0]
     while top_params_key in self.founders_pool.keys():      # Ensure no duplicates
       sorted_params_fitness = sorted_params_fitness[1:]
@@ -342,27 +385,15 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     for params_key, params in list(self.valid_parents.items()):
       del self.pool[params_key]
 
-  # Special case; apply penalty based on proximity to founders
-  def remove_weak(self):
-    sorted_parents = sorted(    # Sort by fitness + penalty
-        self.valid_parents.items(),
-        key=lambda params_kv:
-        params_kv[1].fitness + params_kv[1].founder_proximity_penalty,
-        reverse=True
-    )
-    worst_params = sorted_parents[-1][0]
-    del self.pool[worst_params]  # Remove from pool obj
-
-  # Diversity based on cumulative Euclidean distance between params and other paramss in pool
-  # def get_diversity(self, pool: dict):
-  #   return sum([np.linalg.norm(params - other_params) for params in pool.values() for other_params in pool.values()])
-
-  # Penalty for being close to founders
-  # Return positive L2 distance between params and all paramss in founders pool
-  def founder_proximity_penalty(self, params):
-    return sum([np.linalg.norm(params - founder_params.params) for founder_params in self.founders_pool.values()])
-
   # Full override of end_condition. Only end when max epochs reached
   def end_condition(self):
     if self.current_epoch >= self.epochs:
       return True
+
+  # Penalty for being close to founders
+  # Return positive L2 distance between params and all paramss in founders pool
+  def founder_proximity_penalty(self, params: Parameters) -> float:
+    penalty = 0
+    for param_name, param in params.items():
+      penalty += sum([np.linalg.norm(param - founder_param[param_name]) for founder_param in self.founders_pool.values()])
+    return penalty
