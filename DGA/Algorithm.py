@@ -125,9 +125,9 @@ class Genetic_Algorithm_Base:
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
   def __init__(self,
-               num_params: int = -1,
-               iterations: int = -1,
-               genome: Genome = None,
+               num_params: int,
+               iterations: int,
+               genome: Genome,
                num_parents: int = 2,
                **kwargs) -> None:
     super().__init__(num_params, iterations, genome, **kwargs)
