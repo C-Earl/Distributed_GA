@@ -115,7 +115,7 @@ class Server:
     original_pool = copy.deepcopy(alg.pool)
     init_genes = []
     for i in range(self.num_parallel_processes):
-      init_genes.append(alg.fetch_gene()[0])    # Don't need status on init, just gene
+      init_genes.append(alg.fetch_params()[0])    # Don't need status on init, just gene
 
     # Update pool files
     final_pool = alg.pool
@@ -174,7 +174,7 @@ class Server:
           sys.exit()
 
         # Prune pool and generate next gene for testing
-        gene_name, success = alg.fetch_gene()
+        gene_name, success = alg.fetch_params()
 
         # Update status & break if fetch was success, otherwise try again
         if success:

@@ -53,11 +53,11 @@ class Custom_Plateau_Algorithm(Plateau_Genetic_Algorithm):
     self.mutation_scale = 5
     self.mutation_scale_decay = 0.9999
 
-  def fetch_gene(self, **kwargs):
+  def fetch_params(self, **kwargs):
     self.mutation_scale *= self.mutation_scale_decay
-    return super().fetch_gene(**kwargs)
+    return super().fetch_params(**kwargs)
 
-  def initial_gene(self, **kwargs):
+  def spawn(self, **kwargs):
     return np.random.normal(loc=0, scale=10, size=self.gene_shape)
 
   # Return mutated gene

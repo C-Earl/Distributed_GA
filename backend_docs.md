@@ -117,69 +117,66 @@ Here is the shortened/simplified code representation taken from the Server objec
 
 ```Python
 def init(self, algorithm_type: type, algorithm_args: dict, **kwargs):
+  # Make directories
+  ...
 
-    # Make directories
-    ...
+  # Create run status file
+  write_run_status(self.run_name, algorithm_args)
 
-    # Create run status file
-    write_run_status(self.run_name, algorithm_args)
-
-    ############# Orange arrow from step 0 to step 1 #############
-    # Generate initial genes                 
-    alg = algorithm_type(run_name=self.run_name, **algorithm_args)   
-    init_genes = []                                                            
-    for i in range(self.num_parallel_processes):                             
-      init_genes.append(alg.fetch_gene())                                        
+  ############# Orange arrow from step 0 to step 1 #############
+  # Generate initial genes                 
+  alg = algorithm_type(run_name=self.run_name, **algorithm_args)
+  init_genes = []
+  for i in range(self.num_parallel_processes):
+    init_genes.append(alg.fetch_params())
 
     # Update pool & status
-    self.update_pool(original_pool, final_pool)         
-    self.update_run_status(alg, algorithm_args.keys())
+  self.update_pool(original_pool, final_pool)
+  self.update_run_status(alg, algorithm_args.keys())
 
-    ############# Orange arrow from step 2 to step 3 #############
-    # Call models to run initial genes
-    for i, gene_name in enumerate(init_genes):
-      self.make_call(model_id=i, gene_name, "run_model", **kwargs)
-
-
-  def run_model(self, model_type: type, **kwargs):
-
-    model = model_type(**self.model_args)              # Initialize model
-    gene_data = load_gene_file(self.run_name, gene_name)  # Gene data from GA
-
-    # Load any training data
-    data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-    with portalocker.Lock(...) as _:
-      model.load_data()
-
-    # Test gene & return fitness (by writing to original gene file)
-    fitness = model.run(gene_data['gene'], **kwargs)
-    with portalocker.Lock(...) as _:2
-
-    ############# Orange arrow from step 4 to step 1 #############
-    # Callback server
-    self.make_call(call_type="server_callback", **kwargs)
+  ############# Orange arrow from step 2 to step 3 #############
+  # Call models to run initial genes
+  for i, gene_name in enumerate(init_genes):
+    self.make_call(model_id=i, gene_name, "run_model", **kwargs)
 
 
-  def server_callback(self, algorithm_type: type, **kwargs):
+def run_model(self, model_type: type, **kwargs):
+  model = model_type(**self.model_args)  # Initialize model
+  gene_data = load_gene_file(self.run_name, gene_name)  # Gene data from GA
 
-    # Lock pool files during gene creation to prevent race condition
-    with portalocker.Lock(...) as _:
+  # Load any training data
+  data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
+  with portalocker.Lock(...) as _:
+    model.load_data()
 
-      alg = algorithm_type(...)       # Initialize algorithm
-      if alg.end_condition():         # Check if run is complete
-        sys.exit()
-      gene_name, success = alg.fetch_gene()   # Prune pool & generate next gene for testing
+  # Test gene & return fitness (by writing to original gene file)
+  fitness = model.run(gene_data['gene'], **kwargs)
+  with portalocker.Lock(...) as _: 2
 
-      # Update status & break if fetch was success, otherwise try again
-      if success:
+  ############# Orange arrow from step 4 to step 1 #############
+  # Callback server
+  self.make_call(call_type="server_callback", **kwargs)
 
-        self.update_pool()            # Update pool files (pool modified by alg)
-        self.update_run_status(...)   # Update run status
-        break
-      else:
-        time.sleep(1)
 
-    ############# Orange arrow from step 2 to step 3 #############
-    # Send new gene to model
-    self.make_call(call_type="run_model", gene_name=gene_name)
+def server_callback(self, algorithm_type: type, **kwargs):
+  # Lock pool files during gene creation to prevent race condition
+  with portalocker.Lock(...) as _:
+
+    alg = algorithm_type(...)  # Initialize algorithm
+    if alg.end_condition():  # Check if run is complete
+      sys.exit()
+    gene_name, success = alg.fetch_params()  # Prune pool & generate next gene for testing
+
+    # Update status & break if fetch was success, otherwise try again
+    if success:
+
+      self.update_pool()  # Update pool files (pool modified by alg)
+      self.update_run_status(...)  # Update run status
+      break
+    else:
+      time.sleep(1)
+
+  ############# Orange arrow from step 2 to step 3 #############
+  # Send new gene to model
+  self.make_call(call_type="run_model", gene_name=gene_name)
 ```

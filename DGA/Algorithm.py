@@ -5,8 +5,9 @@ import hashlib
 import numpy as np
 from abc import abstractmethod
 from typing import Union
-from DGA.File_IO import load_gene_file
+from DGA.File_IO import load_gene_file as load_param_file
 from DGA.Pool import Pool, Subset_Pool
+from DGA.Gene import Gene, Genome, Parameters
 
 POOL_DIR = "pool"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
@@ -42,72 +43,62 @@ class Genetic_Algorithm_Base:
   # - Loads pool from files
   # - Undefined vars are set to -1 so they won't be saved to files (issues with inheritence & loading args)
   def __init__(self,
-               num_genes: int = -1,
-               gene_shape: tuple | dict = (-1,),
-               mutation_rate: float = -1.0,
-               iterations: int = -1,
-               **kwargs):
+               num_params: int = -1,  # Number of Parameters in pool
+               iterations: int = -1,  # Number of iterations to run
+               genome: Genome = None,  # Genome to use for creating new Parameters
+               **kwargs) -> None:
 
     # Algorithm specific vars. Only turned to class vars if defined by user
-    if num_genes != -1:
-      self.num_genes = num_genes
-    if gene_shape != (-1,):
-      self.gene_shape = gene_shape
-    if mutation_rate != -1.0:
-      self.mutation_rate = mutation_rate
+    if num_params != -1:
+      self.num_params = num_params
     if iterations != -1:
       self.iterations = iterations
-    self.current_iter = kwargs.pop('current_iter', 0)     # Not an argument that needs to be set by user
+    if genome is not None:
+      self.genome = genome
+    self.current_iter = kwargs.pop('current_iter', 0)  # Not an argument that needs to be set by user
 
     # Check if run from user script or server
-    # Note: When users start a run, they must pass a GA object with num_genes, gene_shape, and mutation_rate
+    # Note: When users start a run, they must pass a GA object with num_params & iterations
     # into the Server obj. This is for syntax simplicity, but we can't load any run files because they don't
     # exist yet. Just return instead
     if 'run_name' not in kwargs.keys():
       return
 
     # File management vars
-    # TODO: Maybe don't need make_class_vars
-    self.run_name = kwargs.pop('run_name', None)
-    self.make_class_vars(**kwargs)  # Initialize other vars (from inheriting classes)
+    self.run_name = kwargs.pop('run_name')
     self.pool_path = file_path(self.run_name, POOL_DIR)
-    self.pool = Pool()        # Subset_Pool() will have all elements of Pool() meeting condition
+    self.pool = Pool()  # Subset_Pool() will have all elements of Pool() meeting condition
     self.valid_parents = Subset_Pool(condition=lambda key, params: params.tested())
     self.pool.add_subset_pool(self.valid_parents)
 
-    # Load gene pool
-    self.pool.extend(self.load_gene_pool())
+    # Load pool
+    self.pool.extend(self.load_pool())
 
-  def load_gene_pool(self):
+  def load_pool(self):
     pool = {}
     for root, dirs, files in os.walk(self.pool_path):
       for file in files:
-        file_name = file.split('.')[0]  # This will be unique hash of the gene
-        gene = load_gene_file(self.run_name, file_name)
-        pool[file_name] = gene
+        file_name = file.split('.')[0]  # This will be unique hash of the param
+        params = load_param_file(self.run_name, file_name)
+        pool[file_name] = params
     return pool
 
-  # Create class vars with proper typing
-  def make_class_vars(self, **kwargs):
-    for arg, arg_value in kwargs.items():
-      setattr(self, arg, arg_value)
-
   @abstractmethod
-  def fetch_gene(self, **kwargs) -> tuple:
+  def fetch_params(self, **kwargs) -> tuple:
     pass
 
   @abstractmethod
-  def create_new_gene(self, **kwargs):
+  def breed(self, **kwargs):
     pass
 
   @abstractmethod
   # Create initial gene to populate pool
-  def initial_gene(self, **kwargs):
+  def spawn(self, **kwargs):
     pass
 
   @abstractmethod
   # Manipulate pool before selection
-  def remove_weak(self):
+  def trim_pool(self):
     pass
 
   @abstractmethod
@@ -134,116 +125,78 @@ class Genetic_Algorithm_Base:
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
   def __init__(self,
-               num_genes: int = -1,
-               gene_shape: tuple | dict = (-1,),
-               mutation_rate: float = -1.0,
+               num_params: int = -1,
                iterations: int = -1,
-               **kwargs):
-    super().__init__(num_genes, gene_shape, mutation_rate, iterations, **kwargs)
+               genome: Genome = None,
+               num_parents: int = 2,
+               **kwargs) -> None:
+    super().__init__(num_params, iterations, genome, **kwargs)
+    self.num_parents = num_parents  # TODO: Implement this
 
-  # Fetch a gene from the pool for testing. This function is a filter, checking that it is safe to create a new gene.
-  # Handles pool-initialization logic, and ensures create_new_gene is only called when it's safe to do so (e.g. enough
-  # genes in pool to make new gene).
-  # - iterates current_iter
-  # - Users should always call super function to ensure create_new_gene gets called
-  def fetch_gene(self, **kwargs) -> tuple:
-    self.current_iter += 1    # Increment iteration
+  # Fetch a new Parameters from pool for testing.
+  def fetch_params(self) -> tuple:
+    self.current_iter += 1  # Increment iteration
 
-    # If pool is unitialized, add new gene
-    if len(self.pool.items()) < self.num_genes:
-      new_gene = self.initial_gene(**kwargs)
-      gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
-                              'fitness': None,
-                              'test_state': 'being tested',
-                              'iteration': self.current_iter}
-      return gene_name, True
+    # If pool is uninitialized, initialize new Parameters
+    if len(self.pool.items()) < self.num_params:
+      new_params = self.spawn(self.current_iter)
+      params_name = get_pool_key(new_params)
+      self.pool[params_name] = new_params
+      return params_name, True
 
     # If there aren't at least 2 genes in pool, can't create new gene
     elif len(self.valid_parents.items()) < 2:
-      self.current_iter -= 1    # No gene created, so don't increment (cancels out prior += 1)
+      self.current_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
       return None, False
 
     # Otherwise, create a new offspring
     else:
-      new_gene = self.create_new_gene(**kwargs)
-      gene_name = get_pool_key(new_gene)      # np.array alone cannot be used as key in dict
-      while gene_name in self.pool.keys():    # Keep attempting until unique
-        new_gene = self.create_new_gene(**kwargs)
-        gene_name = get_pool_key(new_gene)
+      new_params = self.breed()
+      params_name = get_pool_key(new_params)  # np.array alone cannot be used as key in dict
+      while params_name in self.pool.keys():  # Keep attempting until unique
+        new_params = self.breed()
+        params_name = get_pool_key(new_params)
 
-      # Remove worst gene(s) from the pool
-      self.remove_weak()
-      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
-                              'fitness': None,
-                              'test_state': 'being tested',
-                              'iteration': self.current_iter}
-      return gene_name, True
+      # Remove worst Parameters from the pool
+      self.trim_pool()
 
-  # Create new gene from current state of pool
-  # - Called by fetch_gene to create new genes
-  def create_new_gene(self, **kwargs):
-    p1, p2 = self.select_parents()                # Select parents for reproduction
-    new_gene = self.crossover(p1, p2)             # Generate offspring with crossover
-    new_gene = self.mutate(new_gene)              # Random mutation
-    return new_gene
+      # Add new Parameters to pool & return
+      self.pool[params_name] = new_params
+      return params_name, True
 
-  # Return randomized gene of shape gene_shape
-  def initial_gene(self, **kwargs):
-    if isinstance(self.gene_shape, tuple | list):
-      return np.random.rand(*self.gene_shape)
-    elif isinstance(self.gene_shape, dict):
-      return {key: np.random.rand(*shape) for key, shape in self.gene_shape.items()}
-    else:
-      raise ValueError(f"gene_shape must be tuple, list or dict, not {self.gene_shape}")
+  def breed(self) -> Parameters:
+    parents = self.select_parents()
+    offspring = self.crossover(parents, self.current_iter)
+    offspring = self.mutate(offspring)
+    return offspring
 
-  # Remove worst gene from pool
-  def remove_weak(self):
-    sorted_parents = sorted(self.valid_parents.items(),           # Only use tested genes
-        key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)  # Sort by fitness
-    worst_gene = sorted_parents[-1][0]
-    del self.pool[worst_gene]  # Remove from pool
+  def spawn(self, iteration: int) -> Parameters:
+    return self.genome.initialize(iteration)
 
-  # Select parents for reproduction using weighted probabilities based on fitness. Higher fitness -> higher probability of selection
-  def select_parents(self) -> tuple:
-    fitness_scores = [gene_data['fitness'] for _, gene_data in self.valid_parents.items()]  # Get fitness's (unordered)
+  # Removes Parameters with lowest fitness from pool
+  def trim_pool(self) -> None:
+    sorted_parents = sorted(self.valid_parents.items(),  # Only use tested genes
+                            key=lambda params_kv: params_kv[1].fitness, reverse=True)  # Sort by fitness
+    worst_params_name = sorted_parents[-1][0]
+    del self.pool[worst_params_name]  # Remove from pool
+
+  def select_parents(self) -> list[Parameters]:
+    params_list = list(self.valid_parents.values())
+    fitness_scores = [params.fitness for params in params_list]
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
     probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
-    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)	# Select 2 parents
-    sorted_genes = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'], reverse=True)
-    return sorted_genes[p1_i][1]['gene'], sorted_genes[p2_i][1]['gene']
+    parent_inds = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities,
+                                   size=self.num_parents)
+    return [params_list[i] for i in parent_inds]
 
-  # Crossover p1 and p2 genes
-  def crossover(self, p1, p2, gene_shape=None) -> dict:
-    if gene_shape is None:
-      gene_shape = self.gene_shape
+  def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
+    return self.genome.crossover(parents, iteration)
 
-    if isinstance(p1, dict):
-      return {key: self.crossover(p1[key], p2[key], self.gene_shape[key]) for key in p1.keys()}
-    elif isinstance(p1, np.ndarray):
-      crossover_point = np.random.randint(0, np.prod(gene_shape))       # 0 to end of gene_shape
-      # crossover_index = np.unravel_index(crossover_point, gene_shape)   # Unravel index converts 1D index to nD index
-      new_gene = np.concatenate((p1[:crossover_point], p2[crossover_point:]))
-      return new_gene.reshape(gene_shape)
+  def mutate(self, params: Parameters) -> Parameters:
+    return self.genome.mutate(params)
 
-  # Mutate at random point in gene
-  def mutate(self, gene, gene_shape=None) -> dict:
-    if gene_shape is None:
-      gene_shape = self.gene_shape
-
-    if isinstance(gene, dict):
-      return {key: self.mutate(val, self.gene_shape[key]) for key, val in gene.items()}
-    elif isinstance(gene, np.ndarray):
-      if np.random.rand() < self.mutation_rate:
-        mutation_point = np.random.randint(0, np.prod(gene_shape))    # 0 to end of gene_shape
-        gene[np.unravel_index(mutation_point, gene_shape)] += np.random.uniform(-self.mutation_rate, +self.mutation_rate)
-        # ^ Unravel index converts 1D index to nD index
-      return gene
-
-  # End run when max iterations reached
   def end_condition(self) -> bool:
-    if self.current_iter >= self.iterations:
-      return True
+    return self.current_iter >= self.iterations
 
   # Normalize values to positive range [0, +inf) (fitnesses)
   # Do nothing if already in range [0, +inf)
@@ -292,7 +245,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
   # Additional checks made to ensure new gene is safe to create
   # - Must use super().fetch_gene to ensure create_new_gene is called and current_iter is iterated
-  def fetch_gene(self, **kwargs):
+  def fetch_params(self, **kwargs):
     self.current_iter += 1  # Total iteration
     self.epoch_iter += 1    # Iteration for current epoch
     org_decay = self.mutation_decay # Save original decay rate
@@ -301,10 +254,10 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     # If pool is unitialized
     # Initialize new gene, add to pool, and return
     if len(self.pool.items()) < self.num_genes:
-      new_gene = self.initial_gene(**kwargs)
+      new_gene = self.spawn(**kwargs)
       gene_name = get_pool_key(new_gene)  # np.array alone cannot be used as key in dict
       while gene_name in self.pool.keys():  # Keep attempting until unique
-        new_gene = self.initial_gene(**kwargs)
+        new_gene = self.spawn(**kwargs)
         gene_name = get_pool_key(new_gene)
       self.pool[gene_name] = {'gene': new_gene,       # Add to pool
                               'fitness': None,
@@ -325,7 +278,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     # Start new epoch and initialize new gene
     elif self.epoch_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
-      new_gene = self.initial_gene()
+      new_gene = self.spawn()
       gene_name = get_pool_key(new_gene)
       self.pool[gene_name] = {'gene': new_gene,
                               'fitness': None,
@@ -346,7 +299,7 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)
     if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.warmup:  # If slope is small enough
       self.start_new_epoch()
-      new_gene = self.initial_gene()
+      new_gene = self.spawn()
       gene_name = get_pool_key(new_gene)
       self.pool[gene_name] = {'gene': new_gene,  # Add to pool obj
                               'fitness': None,
@@ -357,12 +310,12 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
     # Otherwise, breed new offspring & return
     else:
-      new_gene = self.create_new_gene(**kwargs)
+      new_gene = self.breed(**kwargs)
       gene_name = get_pool_key(new_gene)    # np.array alone cannot be used as key in dict
       while gene_name in self.pool.keys():  # Keep attempting until unique
-        new_gene = self.create_new_gene(**kwargs)
+        new_gene = self.breed(**kwargs)
         gene_name = get_pool_key(new_gene)
-      self.remove_weak()
+      self.trim_pool()
       self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
                               'fitness': None,
                               'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
@@ -372,14 +325,14 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 
   # Create new gene from current state of pool
   # - Called by fetch_gene to create new genes
-  def create_new_gene(self, **kwargs):
+  def breed(self, **kwargs):
     p1, p2 = self.select_parents()  # Select parents for reproduction
     new_gene = self.crossover(p1, p2)  # Generate offspring with crossover
     new_gene = self.mutate(new_gene)  # Random mutation
     return new_gene
 
   # Remove worst gene from pool
-  def remove_weak(self):
+  def trim_pool(self):
     sorted_parents = sorted(self.valid_parents.items(),  # Only use tested genes
                             key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)  # Sort by fitness
     worst_gene = sorted_parents[-1][0]
