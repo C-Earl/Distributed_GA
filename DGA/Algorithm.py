@@ -134,6 +134,8 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     self.num_parents = num_parents  # TODO: Implement this
 
   # Fetch a new Parameters from pool for testing.
+  # Inputs: None
+  # Outputs: tuple of (params_name, success_flag)
   def fetch_params(self) -> tuple:
     self.current_iter += 1  # Increment iteration
 
@@ -151,10 +153,10 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
 
     # Otherwise, create a new offspring
     else:
-      new_params = self.breed()
+      new_params = self.breed(self.current_iter)
       params_name = get_pool_key(new_params)  # np.array alone cannot be used as key in dict
       while params_name in self.pool.keys():  # Keep attempting until unique
-        new_params = self.breed()
+        new_params = self.breed(self.current_iter)
         params_name = get_pool_key(new_params)
 
       # Remove worst Parameters from the pool
@@ -164,22 +166,33 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
       self.pool[params_name] = new_params
       return params_name, True
 
-  def breed(self) -> Parameters:
+  # Breed new offspring with parents selected from pool
+  # Inputs: current iteration
+  # Outputs: new Parameters (new offspring)
+  def breed(self, iteration: int) -> Parameters:
     parents = self.select_parents()
-    offspring = self.crossover(parents, self.current_iter)
+    offspring = self.crossover(parents, iteration)
     offspring = self.mutate(offspring)
     return offspring
 
-  def spawn(self, iteration: int) -> Parameters:
-    return self.genome.initialize(iteration)
+  # Create initial Parameters to populate pool
+  # Inputs: current iteration, user-specific keyword args
+  # Outputs: new Parameters
+  def spawn(self, iteration: int, **kwargs) -> Parameters:
+    return self.genome.initialize(iteration, **kwargs)
 
   # Removes Parameters with lowest fitness from pool
+  # Inputs: None
+  # Outputs: None
   def trim_pool(self) -> None:
     sorted_parents = sorted(self.valid_parents.items(),  # Only use tested genes
                             key=lambda params_kv: params_kv[1].fitness, reverse=True)  # Sort by fitness
     worst_params_name = sorted_parents[-1][0]
     del self.pool[worst_params_name]  # Remove from pool
 
+  # Select parents (for breeding) from pool based on fitness
+  # Inputs: None
+  # Outputs: list of Parameters (self.num_parents long)
   def select_parents(self) -> list[Parameters]:
     params_list = list(self.valid_parents.values())
     fitness_scores = [params.fitness for params in params_list]
@@ -189,12 +202,21 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
                                    size=self.num_parents)
     return [params_list[i] for i in parent_inds]
 
+  # Crossover parents to create offspring (according to user provided Genome)
+  # Inputs: list of Parameters (parents), current iteration
+  # Outputs: new Parameters (offspring)
   def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
     return self.genome.crossover(parents, iteration)
 
+  # Mutate Parameters (according to user provided Genome)
+  # Inputs: Parameters
+  # Outputs: Parameters (same object, mutated)
   def mutate(self, params: Parameters) -> Parameters:
     return self.genome.mutate(params)
 
+  # End condition for run
+  # Inputs: None
+  # Outputs: bool (True if run should end)
   def end_condition(self) -> bool:
     return self.current_iter >= self.iterations
 
@@ -219,19 +241,19 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
   # - Note: iterations is not used for logic in this algorithm (but still needed for constructor).
   #         replaced with iterations_per_epoch
   def __init__(self,
-               num_genes: int,
-               gene_shape: tuple | dict,
-               mutation_rate: float,
-               mutation_decay: float,
-               plateau_sensitivity: float,
-               plateau_sample_size: int,
+               num_params: int,
+               genome: Genome,
+               epochs: int,
                iterations_per_epoch: int,
-               epochs: int, warmup: int,
+               warmup: int,
+               plateau_sample_size: int,
+               mutation_decay: float = 1,
+               plateau_sensitivity: float = 5e-4,
+               num_parents: int = 2,
                past_n_fitness: list = None,
                founders_pool: dict = None,
                **kwargs):
-    super().__init__(num_genes, gene_shape, mutation_rate, **kwargs)
-    self.mutation_decay = mutation_decay
+    super().__init__(num_params, -1, genome, num_parents, **kwargs)
     self.plateau_sensitivity = plateau_sensitivity
     self.plateau_sample_size = plateau_sample_size
     self.iterations_per_epoch = iterations_per_epoch
@@ -240,160 +262,105 @@ class Plateau_Genetic_Algorithm(Genetic_Algorithm):
     self.past_n_fitness = past_n_fitness if past_n_fitness is not None else (np.ones(self.plateau_sample_size) * -np.inf)
     self.current_epoch = kwargs.pop('current_epoch', 0)   # Not an argument that needs to be set by user
     self.epoch_iter = kwargs.pop('epoch_iter', 0)
-    self.original_mutation_rate = kwargs.pop('original_mutation_rate', mutation_rate)  # Save original rate for resetting on epochs
     self.founders_pool = founders_pool if founders_pool is not None else {}
 
-  # Additional checks made to ensure new gene is safe to create
-  # - Must use super().fetch_gene to ensure create_new_gene is called and current_iter is iterated
   def fetch_params(self, **kwargs):
     self.current_iter += 1  # Total iteration
     self.epoch_iter += 1    # Iteration for current epoch
-    org_decay = self.mutation_decay # Save original decay rate
-    self.mutation_rate *= self.mutation_decay
 
     # If pool is unitialized
-    # Initialize new gene, add to pool, and return
-    if len(self.pool.items()) < self.num_genes:
-      new_gene = self.spawn(**kwargs)
-      gene_name = get_pool_key(new_gene)  # np.array alone cannot be used as key in dict
-      while gene_name in self.pool.keys():  # Keep attempting until unique
-        new_gene = self.spawn(**kwargs)
-        gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene,       # Add to pool
-                              'fitness': None,
-                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
-                              'test_state': 'being tested',
-                              'iteration': self.current_iter}
-      return gene_name, True
+    # Initialize new params, add to pool, and return
+    if len(self.pool.items()) < self.num_params:
+      new_params = self.spawn(self.current_iter)
+      params_name = get_pool_key(new_params)  # np.array alone cannot be used as key in dict
+      while params_name in self.pool.keys():  # Keep attempting until unique
+        new_params = self.spawn(self.current_iter)
+        params_name = get_pool_key(new_params)
+      self.pool[params_name] = new_params
+      return params_name, True
 
-    # If there aren't at least 2 tested genes in pool, can't create new gene
-    # Return no gene and unsuccessful flag (False)
+    # If there aren't at least 2 tested Parameters in pool, can't create new Parameters
+    # Return None and unsuccessful flag (False)
     elif len(self.valid_parents.items()) < 2:
       self.current_iter -= 1
       self.epoch_iter -= 1
-      self.mutation_decay = org_decay
       return None, False   # Any changes made during this iteration will be undone
 
     # Check if max iterations for an epoch
-    # Start new epoch and initialize new gene
+    # Start new epoch and initialize new params
     elif self.epoch_iter >= self.iterations_per_epoch:
       self.start_new_epoch()
-      new_gene = self.spawn()
-      gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene,
-                              'fitness': None,
-                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
-                              'test_state': 'being tested',
-                              'iteration': self.current_iter}
-      return gene_name, True
+      new_params = self.spawn(self.current_iter)
+      params_name = get_pool_key(new_params)
+      self.pool[params_name] = new_params
+      return params_name, True
 
     ## Add most recent fitness's to list ##
     # Shift frame for past_n_fitness & add any newly tested genes
     self.past_n_fitness = np.roll(self.past_n_fitness, -1)
-    for gene_key, gene in self.valid_parents.items():
-      if gene['iteration'] in range(self.current_iter - self.plateau_sample_size, self.current_iter):
-        ind = self.plateau_sample_size - (self.current_iter - gene['iteration'])
-        self.past_n_fitness[ind] = gene['fitness']
+    for params_key, params in self.valid_parents.items():
+      if params.iteration in range(self.current_iter - self.plateau_sample_size, self.current_iter):
+        ind = self.plateau_sample_size - (self.current_iter - params.iteration)
+        self.past_n_fitness[ind] = params.fitness
 
     # Check for performance plateau (new epoch if plateau detected & past warmup phase)
     coefs = np.polyfit(np.arange(len(self.past_n_fitness)), self.past_n_fitness, 1)
     if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.warmup:  # If slope is small enough
       self.start_new_epoch()
-      new_gene = self.spawn()
-      gene_name = get_pool_key(new_gene)
-      self.pool[gene_name] = {'gene': new_gene,  # Add to pool obj
-                              'fitness': None,
-                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
-                              'test_state': 'being tested',
-                              'iteration': self.current_iter}
-      return gene_name, True
+      new_params = self.spawn(self.current_iter)
+      params_name = get_pool_key(new_params)
+      self.pool[params_name] = new_params
+      return params_name, True
 
     # Otherwise, breed new offspring & return
     else:
-      new_gene = self.breed(**kwargs)
-      gene_name = get_pool_key(new_gene)    # np.array alone cannot be used as key in dict
-      while gene_name in self.pool.keys():  # Keep attempting until unique
-        new_gene = self.breed(**kwargs)
-        gene_name = get_pool_key(new_gene)
+      new_params = self.breed(self.current_iter)
+      params_name = get_pool_key(new_params)    # np.array alone cannot be used as key in dict
+      while params_name in self.pool.keys():  # Keep attempting until unique
+        new_params = self.breed(self.current_iter)
+        params_name = get_pool_key(new_params)
       self.trim_pool()
-      self.pool[gene_name] = {'gene': new_gene,       # Add to pool obj
-                              'fitness': None,
-                              'founder_proximity_penalty': self.founder_proximity_penalty(new_gene),
-                              'test_state': 'being tested',
-                              'iteration': self.current_iter}
-      return gene_name, True
+      self.pool[params_name] = new_params
+      return params_name, True
 
-  # Create new gene from current state of pool
-  # - Called by fetch_gene to create new genes
-  def breed(self, **kwargs):
-    p1, p2 = self.select_parents()  # Select parents for reproduction
-    new_gene = self.crossover(p1, p2)  # Generate offspring with crossover
-    new_gene = self.mutate(new_gene)  # Random mutation
-    return new_gene
-
-  # Remove worst gene from pool
-  def trim_pool(self):
-    sorted_parents = sorted(self.valid_parents.items(),  # Only use tested genes
-                            key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)  # Sort by fitness
-    worst_gene = sorted_parents[-1][0]
-    del self.pool[worst_gene]  # Remove from pool
-
-  # Select parents for reproduction using weighted probabilities based on fitness. Higher fitness -> higher probability of selection
-  def select_parents(self) -> tuple:
-    gene_list = list(self.valid_parents.items())
-    fitness_scores = [gene_data['fitness'] + gene_data['founder_proximity_penalty'] for _, gene_data in gene_list]
-    normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
-    probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
-    p1_i, p2_i = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities, size=2)  # Select 2 parents
-    return gene_list[p1_i][1]['gene'], gene_list[p2_i][1]['gene']
-
-  # Crossover p1 and p2 genes
-  def crossover(self, p1, p2, gene_shape=None) -> dict:
-    return super().crossover(p1, p2, gene_shape)
-
-  # Mutate at random point in gene
-  def mutate(self, gene, gene_shape=None) -> dict:
-    return super().mutate(gene, gene_shape)
-
-  # Begin a new epoch, and return the first gene of that epoch
+  # Begin a new epoch, and return the first params of that epoch
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
-    self.mutation_rate = self.original_mutation_rate
     self.epoch_iter = 0
     self.past_n_fitness = (np.ones(self.plateau_sample_size) * -np.inf)
 
-    # Move top scoring genes to founders pool
-    sorted_gene_fitness = sorted(self.valid_parents.items(), key=lambda gene_kv: gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'], reverse=True)
-    top_gene_key, top_gene_data = sorted_gene_fitness[0]
-    while top_gene_key in self.founders_pool.keys():      # Ensure no duplicates
-      sorted_gene_fitness = sorted_gene_fitness[1:]
-      top_gene_key, top_gene_data = sorted_gene_fitness[0]
-    self.founders_pool[top_gene_key] = top_gene_data
+    # Move top scoring paramss to founders pool
+    sorted_params_fitness = sorted(self.valid_parents.items(), key=lambda params_kv: params_kv[1].fitness + params_kv.founder_proximity_penalty, reverse=True)
+    top_params_key, top_params_data = sorted_params_fitness[0]
+    while top_params_key in self.founders_pool.keys():      # Ensure no duplicates
+      sorted_params_fitness = sorted_params_fitness[1:]
+      top_params_key, top_params_data = sorted_params_fitness[0]
+    self.founders_pool[top_params_key] = top_params_data
 
     # Re-initialize pool
-    # Note: When other model-process's return, fetch_gene will handle filling the pool
-    for gene_key, gene in list(self.valid_parents.items()):
-      del self.pool[gene_key]
+    # Note: When other model-process's return, fetch_params will handle filling the pool
+    for params_key, params in list(self.valid_parents.items()):
+      del self.pool[params_key]
 
   # Special case; apply penalty based on proximity to founders
   def remove_weak(self):
     sorted_parents = sorted(    # Sort by fitness + penalty
         self.valid_parents.items(),
-        key=lambda gene_kv:
-        gene_kv[1]['fitness'] + gene_kv[1]['founder_proximity_penalty'],
+        key=lambda params_kv:
+        params_kv[1].fitness + params_kv[1].founder_proximity_penalty,
         reverse=True
     )
-    worst_gene = sorted_parents[-1][0]
-    del self.pool[worst_gene]  # Remove from pool obj
+    worst_params = sorted_parents[-1][0]
+    del self.pool[worst_params]  # Remove from pool obj
 
-  # Diversity based on cumulative Euclidean distance between gene and other genes in pool
+  # Diversity based on cumulative Euclidean distance between params and other paramss in pool
   # def get_diversity(self, pool: dict):
-  #   return sum([np.linalg.norm(gene - other_gene) for gene in pool.values() for other_gene in pool.values()])
+  #   return sum([np.linalg.norm(params - other_params) for params in pool.values() for other_params in pool.values()])
 
   # Penalty for being close to founders
-  # Return positive L2 distance between gene and all genes in founders pool
-  def founder_proximity_penalty(self, gene):
-    return sum([np.linalg.norm(gene - founder_gene['gene']) for founder_gene in self.founders_pool.values()])
+  # Return positive L2 distance between params and all paramss in founders pool
+  def founder_proximity_penalty(self, params):
+    return sum([np.linalg.norm(params - founder_params.params) for founder_params in self.founders_pool.values()])
 
   # Full override of end_condition. Only end when max epochs reached
   def end_condition(self):
