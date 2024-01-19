@@ -1,7 +1,7 @@
 import inspect
 import time
 import numpy as np
-from typing import Self
+# from typing import Self
 
 
 ### Initializers ###
@@ -282,7 +282,7 @@ class Genome(Gene, dict):
     for mutator in mutators.values():
       mutator.decay_mutation_rate()
 
-  def copy(self) -> Self:
+  def copy(self):
     new_genome = Genome(shape=self.shape, datatype=self.datatype, default=self.default,
                         initializer=self.initializer, mutator=self.mutator, crosser=self.crosser)
     for name, gene in self.items():
