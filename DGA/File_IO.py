@@ -1,5 +1,6 @@
 import os
 from os.path import join as file_path
+from DGA.Gene import Gene, Genome, Parameters
 import pickle
 import json
 import jsbeautifier
@@ -27,20 +28,12 @@ def jsonify(d: dict):
       d[k] = v.tolist()
     if isinstance(v, type):
       d[k] = str(v)
+    if isinstance(v, Genome):
+      d[k] = v.to_json()
+    if isinstance(v, Gene):
+      d[k] = v.to_json()
   return d
 
-# Asynchronous error log handler. Use as decorator
-# def error_log(func):
-#   def wrapper():
-#     try:
-#       func()
-#     except Exception as e:
-#       error_log = {
-#         "timestamp": time.strftime('%H:%M:%S', time.localtime()),
-#         "error": str(e),
-#         "traceback": traceback.format_exc()
-#       }
-#       write_error_log(run_name, error_log)
 
 # Arguments passed to model process are first written to file. This function writes them.
 def write_model_args_to_file(model_id: int, **kwargs):
@@ -56,6 +49,7 @@ def write_model_args_to_file(model_id: int, **kwargs):
   kwargs_json = jsonify(copy.deepcopy(kwargs))
   with open(args_path, 'w') as args_file:
     json.dump(kwargs_json, args_file, indent=2)
+
 
 # Server writes args to file, model process the loads with this function
 def load_model_args_from_file(model_id: int, run_name: str):

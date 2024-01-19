@@ -92,11 +92,6 @@ class Genetic_Algorithm_Base:
     pass
 
   @abstractmethod
-  # Create initial gene to populate pool
-  def spawn(self, **kwargs):
-    pass
-
-  @abstractmethod
   # Manipulate pool before selection
   def trim_pool(self):
     pass
@@ -107,19 +102,29 @@ class Genetic_Algorithm_Base:
     pass
 
   @abstractmethod
-  # Crossover parents to create offspring
-  def crossover(self, p1, p2) -> dict:
-    pass
-
-  @abstractmethod
-  # Mutate offspring
-  def mutate(self, gene) -> dict:
-    pass
-
-  @abstractmethod
   # End condition for run
   def end_condition(self):
     pass
+
+  # Create initial Parameters to populate pool
+  # Inputs: current iteration, user-specific keyword args
+  # Outputs: new Parameters
+  def spawn(self, iteration: int) -> Parameters:
+    return self.genome.initialize(iteration)
+
+  # Crossover parents to create offspring (according to user provided Genome)
+  # Inputs: list of Parameters (parents), current iteration
+  # Outputs: new Parameters (offspring)
+  def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
+    return self.genome.crossover(parents, iteration)
+
+  # Mutate Parameters (according to user provided Genome)
+  # Inputs: Parameters
+  # Outputs: Parameters (same object, mutated)
+  def mutate(self, params: Parameters) -> Parameters:
+    params = self.genome.mutate(params)
+    self.genome.decay_mutators()
+    return params
 
 
 class Genetic_Algorithm(Genetic_Algorithm_Base):
@@ -212,7 +217,9 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
   # Inputs: Parameters
   # Outputs: Parameters (same object, mutated)
   def mutate(self, params: Parameters) -> Parameters:
-    return self.genome.mutate(params)
+    params = self.genome.mutate(params)
+    self.genome.decay_mutators()
+    return params
 
   # End condition for run
   # Inputs: None

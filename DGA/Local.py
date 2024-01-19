@@ -8,11 +8,11 @@ from os.path import join as file_path
 
 
 class Synchronized:
-  def __init__(self, run_name: str, algorithm: Algorithm, model: Model | type, **kwargs):
+  def __init__(self, run_name: str, algorithm: Algorithm, model: Model, **kwargs):
     # Create run folder
     os.makedirs(file_path(run_name, LOG_DIR), exist_ok=True)
 
-    # Re-initialize algorithm & client (necessary workaround from async version)
+    # Re-initialize algorithm (necessary workaround from async version)
     algorithm_args = list_public_attributes(algorithm)
     algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
     alg_type = type(algorithm)
@@ -30,6 +30,9 @@ class Synchronized:
     # Re-point passed in algorithm & model to properly initialized ones
     algorithm = self.algorithm
     model = self.model
+
+    # Load data for model
+    model.load_data(**kwargs)
 
   def run(self):
     # Initialize pool

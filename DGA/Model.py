@@ -25,19 +25,19 @@ class Model():
 
   # Run model
   @abstractmethod
-  def run(self, gene, **kwargs) -> float:
+  def run(self, params: Parameters, **kwargs) -> float:
     pass
 
 
 class Testing_Model(Model):
   def __init__(self,
-               genome: Genome,                # Determines size of parameters
-               vector_distribution: float,    # Range of target vector values
-               vector_scale: float = 3,       # Scale of target vector values
-               num_vectors: int = 1,          # Number of target vectors
-               target_vectors: list = None,   # Pre-initialized target vectors
-               **kwargs):
-    super().__init__(**kwargs)
+               genome: Genome,  # Determines size of parameters
+               vector_distribution: float,  # Range of potential target vector locations
+               vector_scale: float = 3,  # Variance in values of target vectors
+               num_vectors: int = 1,  # Number of target vectors
+               target_vectors: list = None,  # Pre-initialized target vectors
+               **kwargs: object):
+    super().__init__()
     self.target_vectors = []
     self.genome = genome
 
@@ -72,7 +72,7 @@ class Testing_Model(Model):
 
   # Return distance from closest target vector
   def run(self, params: Parameters, **kwargs) -> float:
-    param = params.values()[0]    # Only need 1 param, rest ignored
+    param = list(params.values())[0]    # Only need 1 param, rest ignored
     smallest_diff = np.inf
     for i, targ in enumerate(self.target_vectors):
       for name, gene in self.genome.items():
