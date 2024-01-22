@@ -5,17 +5,19 @@ import hashlib
 import numpy as np
 from abc import abstractmethod
 from typing import Union
-from DGA.File_IO import load_gene_file as load_param_file
+from DGA.File_IO import load_params_file as load_param_file, load_history
 from DGA.Pool import Pool, Subset_Pool
 from DGA.Gene import Gene, Genome, Parameters
 
 POOL_DIR = "pool"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 
+
 # Return hash of bytes of obj x
 def consistent_hasher(x):
   b = bytes(str(x), 'utf-8')
   return hashlib.sha256(b).hexdigest()  # Get the hexadecimal representation of the hash value
+
 
 # Takes np and transforms into tuple (makes it hashable)
 def hashable_nparray(gene: np.ndarray):
@@ -64,6 +66,11 @@ class Genetic_Algorithm_Base:
     if 'run_name' not in kwargs.keys():
       return
 
+    # Other keyword args
+    self.agent_id = kwargs.get('agent_id', None)  # Get agent id if doing parallel run
+    history = kwargs.get('history', False)  # Get previous tested params if doing parallel run
+    additional_log_vars = kwargs.get('log_vars', [])  # Get additional names of vars for logging
+
     # File management vars
     self.run_name = kwargs.pop('run_name')
     self.pool_path = file_path(self.run_name, POOL_DIR)
@@ -74,6 +81,14 @@ class Genetic_Algorithm_Base:
     # Load pool
     self.pool.extend(self.load_pool())
 
+    # Load history
+    if history:
+      self.history = self.load_history()
+
+    # Initialize logging vars
+    self.log_vars = ['timestamp', 'fitness', 'iteration']
+    self.log_vars.extend(additional_log_vars)
+
   def load_pool(self):
     pool = {}
     for root, dirs, files in os.walk(self.pool_path):
@@ -82,6 +97,9 @@ class Genetic_Algorithm_Base:
         params = load_param_file(self.run_name, file_name)
         pool[file_name] = params
     return pool
+
+  def load_history(self):
+    return load_history(self.run_name)
 
   @abstractmethod
   def fetch_params(self, **kwargs) -> tuple:

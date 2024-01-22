@@ -1,32 +1,49 @@
 from abc import abstractmethod
 from DGA.Gene import Parameters, Genome
-from DGA.File_IO import load_gene_file
+from DGA.File_IO import load_params_file
 import numpy as np
 import time
 
 POOL_DIR = "pool"
 LOCK_DIR = "locks"
 
+# https://stackoverflow.com/questions/17075071/is-there-a-python-method-to-access-all-non-private-and-non-builtin-attributes-of
+# Helper function to get all public attributes of an object
+def list_public_attributes(input_var):
+  return [k for k, v in vars(input_var).items() if
+          not (k.startswith('_') or callable(v))]
 
 class Model():
+
+  def __init__(self):
+    self.log_vars = []    # List of variables to log
+    super().__init__()
 
   # Load data (will only be called with proper filelock)
   def load_data(self, **kwargs):
     pass
 
   # Write to log
-  def logger(self, fitness: float, iteration: int, **kwargs):
-    log = {
-      "timestamp" : time.strftime('%H:%M:%S', time.localtime()),
-      "fitness" : fitness,
-      "iteration" : iteration,
-    }
+  def logger(self, params: Parameters):
+    # log = {
+    #   "timestamp" : time.strftime('%H:%M:%S', time.localtime()),
+    #   "fitness" : params.fitness,
+    #   "iteration" : params.iteration,
+    # }
+    log = {}
+    # if 'timestamp' in self.log_vars:
+    #   log.update({'timestamp': time.strftime('%H:%M:%S', time.localtime())})
+    log.update({key: getattr(params, key) for key in self.log_vars})
     return log
 
   # Run model
   @abstractmethod
   def run(self, params: Parameters, **kwargs) -> float:
     pass
+
+  # Return json-friendly version of model args
+  def args_to_json(self) -> dict:
+    return {key: self.__dict__[key] for key in list_public_attributes(self)}
 
 
 class Testing_Model(Model):
@@ -40,6 +57,7 @@ class Testing_Model(Model):
     super().__init__()
     self.target_vectors = []
     self.genome = genome
+    self.vector_distribution = vector_distribution
 
     # Use previously initialized target vectors
     if 'target_vectors' in kwargs:
@@ -77,6 +95,7 @@ class Testing_Model(Model):
     for i, targ in enumerate(self.target_vectors):
       for name, gene in self.genome.items():
         if gene.shape is not None:
+          # print(params, self.target_vectors)
           targ = targ[name]
         elif self.genome.shape is not None:
           targ = targ
@@ -86,3 +105,25 @@ class Testing_Model(Model):
       if diff < smallest_diff:
         smallest_diff = diff
     return -smallest_diff
+
+  def args_to_json(self) -> dict:
+    # json = super().args_to_json()
+    json_vectors = []
+    for vector in self.target_vectors:
+      json_vector = {}
+      for name, v in vector.items():
+        json_vector[name] = v.tolist()
+      json_vectors.append(json_vector)
+    json = {
+      'target_vectors': json_vectors,
+      'vector_distribution': self.vector_distribution,
+      'genome': self.genome.to_json()
+    }
+    return json
+
+  # def json_to_args(self, json: dict) -> dict:
+  #   args = {
+  #     'target_vectors': json['target_vectors'],
+  #     'vector_distribution': json['vector_distribution'],
+  #     'genome': Genome.from_json(json['genome'])
+  #   }

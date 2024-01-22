@@ -18,74 +18,72 @@ DATA_LOCK_NAME = "DATA_LOCK.lock"
 RUN_STATUS_NAME_JSON = "RUN_STATUS.json"
 RUN_STATUS_NAME_PKL = "RUN_STATUS.pkl"
 ERROR_LOG_NAME = "ERROR_LOG.log"
+AGENT_NAME = "AGENT"
 
 # Transform any non-json compatible types
 def jsonify(d: dict):
   for k, v in d.items():
     if isinstance(v, dict):   # Recursively jsonify
       d[k] = jsonify(v)
-    if isinstance(v, np.ndarray):
+    elif isinstance(v, np.ndarray):
       d[k] = v.tolist()
-    if isinstance(v, type):
+    elif isinstance(v, type):
       d[k] = str(v)
-    if isinstance(v, Genome):
+    elif isinstance(v, Genome):
       d[k] = v.to_json()
-    if isinstance(v, Gene):
+    elif isinstance(v, Gene):
       d[k] = v.to_json()
+    if (isinstance(v, Parameters)):
+      print("hi")
+  # print(d)
   return d
 
 
 # Arguments passed to model process are first written to file. This function writes them.
-def write_model_args_to_file(model_id: int, **kwargs):
-  kwargs['model_id'] = model_id
+def write_model_args_to_file(agent_id: int, **kwargs):
+  kwargs['agent_id'] = agent_id
 
   # Write to pkl
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"model{model_id}_args.pkl")
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"{AGENT_NAME}_{agent_id}_args.pkl")
   with open(args_path, 'wb') as args_file:
     pickle.dump(kwargs, args_file)
 
   # Write to json
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"model{model_id}_args.json")
+  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"{AGENT_NAME}_{agent_id}_args.json")
   kwargs_json = jsonify(copy.deepcopy(kwargs))
   with open(args_path, 'w') as args_file:
     json.dump(kwargs_json, args_file, indent=2)
 
 
 # Server writes args to file, model process the loads with this function
-def load_model_args_from_file(model_id: int, run_name: str):
-  args_path = file_path(run_name, ARGS_FOLDER, f"model{model_id}_args.pkl")   # Only load from pickle file
+def load_model_args_from_file(agent_id: int, run_name: str):
+  args_path = file_path(run_name, ARGS_FOLDER, f"{AGENT_NAME}_{agent_id}_args.pkl")   # Only load from pickle file
   with open(args_path, 'rb') as args_file:
     return pickle.load(args_file)
 
 
-# Take gene and write it to a file. Returns file name and written data
-# def create_gene_file(run_name: str, gene_name: str, gene: np.ndarray | dict):
-#   gene_data = {'gene': gene, 'fitness': None, 'test_state': 'being tested'}
-#   write_gene_file(gene_data, gene_name, run_name)
-
-
-# Write gene to file
-def write_gene_file(run_name: str, gene_name: str, gene: dict):
+# Write params to file
+def write_params_file(run_name: str, params_name: str, params: Parameters):
   pool_path = file_path(run_name, POOL_DIR)
-  gene_path = file_path(pool_path, gene_name) + ".pkl"
-  with open(gene_path, 'wb') as gene_file:
-    pickle.dump(gene, gene_file)
+  params_path = file_path(pool_path, params_name) + ".pkl"
+  with open(params_path, 'wb') as params_file:
+    pickle.dump(params, params_file)
 
 
-# Load gene from file
-def load_gene_file(run_name: str, gene_name: str):
+# Load params from file
+def load_params_file(run_name: str, params_name: str):
   pool_path = file_path(run_name, POOL_DIR)
-  gene_path = file_path(pool_path, gene_name) + ".pkl"
-  with open(gene_path, 'rb') as gene_file:
-    gene = pickle.load(gene_file)
-  return gene
+  params_path = file_path(pool_path, params_name) + ".pkl"
+  with open(params_path, 'rb') as params_file:
+    params = pickle.load(params_file)
+  return params
 
 
-# Delete gene file
-def delete_gene_file(run_name: str, gene_name: str):
+# Delete params file
+def delete_params_file(run_name: str, params_name: str):
   pool_path = file_path(run_name, POOL_DIR)
-  gene_path = file_path(pool_path, gene_name) + ".pkl"
-  os.remove(gene_path)
+  params_path = file_path(pool_path, params_name) + ".pkl"
+  os.remove(params_path)
   return True
 
 
@@ -114,14 +112,14 @@ def write_run_status(run_name: str, status: dict):
 
 
 # Write to model log file
-def write_log(run_name: str, model_id: int, log: dict | np.ndarray):
-  log_path = file_path(run_name, LOG_DIR, f'model_{str(model_id)}' + ".log")
+def write_log(run_name: str, agent_id: int, log: dict | np.ndarray):
+  log_path = file_path(run_name, LOG_DIR, f'{AGENT_NAME}_{str(agent_id)}' + ".log")
   with open(log_path, 'a+') as log_file:
     log_file.write(json.dumps(log) + "\n")    # Not json.dump because want each log on a new line
 
 
-def read_log(run_name: str, model_id: int):
-  log_path = file_path(run_name, LOG_DIR, f'model_{str(model_id)}' + ".log")
+def read_log(run_name: str, agent_id: int):
+  log_path = file_path(run_name, LOG_DIR, f'{AGENT_NAME}_{str(agent_id)}' + ".log")
   with open(log_path, 'r') as log_file:
     logs = log_file.readlines()
   for i in range(len(logs)):
@@ -129,11 +127,23 @@ def read_log(run_name: str, model_id: int):
   return logs
 
 
+def load_history(run_name: str):
+  history = {}
+  log_folder = file_path(run_name, LOG_DIR)
+  for root, dirs, files in os.walk(log_folder):
+    for file in files:
+      if file.endswith(".log") and not file == 'ERROR_LOG.log':
+        agent_id = int(file.split('_')[1].split('.')[0])
+        history[agent_id] = read_log(run_name, agent_id)
+  return history
+
+
 def write_pool_log(run_name: str, pool_log: dict):
   pool_log_copy = jsonify(copy.deepcopy(pool_log))
   log_path = file_path(run_name, LOG_DIR, POOL_LOG_NAME)
   with open(log_path, 'a') as log_file:
     log_file.write(json.dumps(pool_log_copy) + "\n")    # Not json.dump because want each log on a new line
+
 
 def write_error_log(run_name: str, error_log: dict):
   error_log_copy = jsonify(error_log)

@@ -1,7 +1,7 @@
 import inspect
 import time
 import numpy as np
-# from typing import Self
+from abc import abstractmethod
 
 
 ### Initializers ###
@@ -152,158 +152,211 @@ class Parameters(dict):
   def tested(self) -> bool:
     return self.tested_
 
+  def set_attribute(self, name: str, value: any):
+    setattr(self, name, value)
+
   def __hash__(self):
     return self.hash_
 
 
-class Gene:
+class Gene():
   def __init__(self,
                shape: tuple,
-               datatype: type = float,
+               dtype: type,
                default: any = None,
-               # mutation_rate: float,
-               initializer: base_init_class = None,
-               mutator: base_mutate_class = None,
-               crosser: base_crossover_class = None,
+               min_val: float = -1,
+               max_val: float = +1,
                **kwargs):
     self.shape = shape
-    self.datatype = datatype
+    self.dtype = dtype
     self.default = default
+    self.min_val = min_val
+    self.max_val = max_val
     for key, val in kwargs.items():
       setattr(self, key, val)
-
-    # Set initialization, mutation, and crossover functions
-    self.initializer = initializer
-    self.mutator = mutator
-    self.crosser = crosser
-
-    if self.initializer is not None:
-      self.init_arg_names = inspect.getfullargspec(self.initializer.run).args if self.initializer else None
-      self.init_args = {name : arg for name, arg in self.__dict__.items() if name in self.init_arg_names}
-
-    if self.mutator is not None:
-      self.mutate_arg_names = inspect.getfullargspec(self.mutator.run).args if self.mutator else None
-      self.mutate_args = {name : arg for name, arg in self.__dict__.items() if name in self.mutate_arg_names}
-
-    if self.crosser is not None:
-      self.crossover_arg_names = inspect.getfullargspec(self.crosser.run).args if self.crosser else None
-      self.crossover_args = {name : arg for name, arg in self.__dict__.items() if name in self.crossover_arg_names}
+    super().__init__()
 
   def to_json(self):
-    pass
-
-  def copy(self):
-    return Gene(shape=self.shape, datatype=self.datatype, default=self.default,
-                initializer=self.initializer, mutator=self.mutator, crosser=self.crosser)
+    attributes = {key: val for key, val in self.__dict__.items()}
+    attributes['dtype'] = str(attributes['dtype'])
+    return attributes
 
 
-class Genome(Gene, dict):
-  def __init__(self,
-               datatype: type = float,
-               default: any = None,
-               initializer: base_init_class = None,
-               mutator: base_mutate_class = None,
-               crosser: base_crossover_class = None,
-               **kwargs):
-    super().__init__(shape=None, datatype=datatype, default=default,
-                     initializer=initializer, mutator=mutator,
-                     crosser=crosser, **kwargs)
+# During
+# Take in set of genes, turn them
+class Genome(dict):
+  def __init__(self):
+    super().__init__()
 
   def add_gene(self, gene: Gene, name: str):
     self[name] = gene
 
-  # Returns initializers for all genes
-  # Prioritize gene-level initializers, then genome-level
-  def get_initializers(self):
-    return {name: gene.initializer if gene.initializer is not None else self.initializer for name, gene in self.items()}
+  # Take all values from a Parameters object and flatten them into a single 1D array
+  def flatten_params(self, params: Parameters) -> np.ndarray:
+    flattened_params = []
+    for param in params.values():
+      flattened_params.append(param.flatten())
+    return np.concatenate(flattened_params)
 
-  def get_mutators(self):
-    return {name: gene.mutator if gene.mutator is not None else self.mutator for name, gene in self.items()}
-
-  def get_crossers(self):
-    return {name: gene.crosser if gene.crosser is not None else self.crosser for name, gene in self.items()}
-
-  def get_run_args(self, gene_name: str, class_: callable) -> dict[str, any]:
-    gene = self[gene_name]
-    arg_names = inspect.getfullargspec(class_.run).args
-    arg_vals = {name: self.__dict__[name] if name in self.__dict__ else None for name in arg_names}
-    arg_vals = {name: gene.__dict__[name] if name in gene.__dict__ else None for name in arg_names}
-    if 'self' in arg_vals.keys():
-      del arg_vals['self']
-    return arg_vals
-
-  def initialize(self, iteration: int) -> Parameters:
-    new_params = Parameters(iteration=iteration)
-
-    # Set proper initializers & arguments for all genes
-    initializers = self.get_initializers()
-    # args = self.get_run_args(initializers)
-    for gene_name, initializer in initializers.items():
-      if initializer is None:
-        raise Exception(f"Genome initializer not defined for gene {gene_name}")
-
-      args = self.get_run_args(gene_name, initializer)
-      new_params[gene_name] = initializer.run(**args)
-
-    return new_params
-
-  def mutate(self, params: Parameters) -> any:
-    # Set proper mutators
-    mutators = self.get_mutators()
-    for gene_name, mutator in mutators.items():
-      if mutator is None:
-        raise Exception(f"Genome mutator not defined for gene {gene_name}")
-
-      args = self.get_run_args(gene_name, mutator)
-      if 'param' in args.keys():
-        del args['param']
-      params[gene_name] = mutator.run(params[gene_name], **args)
+  # Take a 1D array of values and unflatten them into a Parameters object
+  def unflatten_params(self, flattened_params: np.ndarray) -> Parameters:
+    params = Parameters()
+    for key, gene in self.items():
+      params[key] = flattened_params[:np.prod(gene.shape)].reshape(gene.shape)
+      flattened_params = flattened_params[np.prod(gene.shape):]
     return params
 
-  def crossover(self, parents: list[Parameters], iteration: int) -> any:
-    new_params = Parameters(iteration=iteration)
+  # Clamp parameter values within defined gene range
+  def clamp_params(self, params: Parameters):
+    for key, gene in self.items():
+      params[key] = np.clip(params[key], gene.min_val, gene.max_val)
 
-    # Set proper crossovers
-    crossovers = self.get_crossers()
-    # args = self.get_run_args(crossovers)
-    for gene_name, crossover in crossovers.items():
-      if crossover is None:
-        raise Exception(f"Genome crossover not defined for gene {gene_name}")
+  def to_json(self):
+    # json_genes = {key: gene.to_json() for key, gene in self.items()}
+    return dict(self)
 
-      args = self.get_run_args(gene_name, crossover)
-      if 'parents' in args.keys():
-        del args['parents']
-      parent_params = [parent[gene_name] for parent in parents]
-      new_params[gene_name] = crossover.run(parent_params, **args)
-    return new_params
+  @abstractmethod
+  def initialize(self, iterations: int) -> Parameters:
+    pass
 
-  def decay_mutators(self):
-    mutators = self.get_mutators()
-    for mutator in mutators.values():
-      mutator.decay_mutation_rate()
+  @abstractmethod
+  def mutate(self, params: Parameters) -> Parameters:
+    pass
 
-  def copy(self):
-    new_genome = Genome(shape=self.shape, datatype=self.datatype, default=self.default,
-                        initializer=self.initializer, mutator=self.mutator, crosser=self.crosser)
-    for name, gene in self.items():
-      new_genome.add_gene(gene.copy(), name)
-    return new_genome
+  @abstractmethod
+  def crossover(self, parents: list[Parameters], iterations: int) -> Parameters:
+    pass
 
 
-if __name__ == '__main__':
-  gene_1 = Gene(shape=(10,5), mutator=no_mutation())
-  gene_2 = Gene(shape=(1,))
-  genome = Genome(
-    initializer=uniform_initialization(min_val=-1, max_val=+1),
-    mutator=normal_mutation(loc=-100, scale=1),
-    crosser=mean_crossover(),)
-  genome.add_gene(gene_1, 'gene_1')
-  genome.add_gene(gene_2, 'gene_2')
-  init_param = genome.initialize(0)
-  mutated_param = genome.mutate(init_param.copy())
-  print(mutated_param)
-  # print(init_param['gene_1'] - mutated_param['gene_1'])
-  # print(init_param['gene_2'], mutated_param['gene_2'])
-  crossed_param = genome.crossover([init_param, mutated_param], iteration=0)
-  print(np.mean([init_param['gene_1'], mutated_param['gene_1']], axis=0))
-  print(crossed_param['gene_1'])
+# class Gene:
+#   def __init__(self,
+#                shape: tuple,
+#                datatype: type = float,
+#                default: any = None,
+#                # mutation_rate: float,
+#                initializer: base_init_class = None,
+#                mutator: base_mutate_class = None,
+#                crosser: base_crossover_class = None,
+#                **kwargs):
+#     self.shape = shape
+#     self.datatype = datatype
+#     self.default = default
+#     for key, val in kwargs.items():
+#       setattr(self, key, val)
+#
+#     # Set initialization, mutation, and crossover functions
+#     self.initializer = initializer
+#     self.mutator = mutator
+#     self.crosser = crosser
+#
+#     if self.initializer is not None:
+#       self.init_arg_names = inspect.getfullargspec(self.initializer.run).args if self.initializer else None
+#       self.init_args = {name : arg for name, arg in self.__dict__.items() if name in self.init_arg_names}
+#
+#     if self.mutator is not None:
+#       self.mutate_arg_names = inspect.getfullargspec(self.mutator.run).args if self.mutator else None
+#       self.mutate_args = {name : arg for name, arg in self.__dict__.items() if name in self.mutate_arg_names}
+#
+#     if self.crosser is not None:
+#       self.crossover_arg_names = inspect.getfullargspec(self.crosser.run).args if self.crosser else None
+#       self.crossover_args = {name : arg for name, arg in self.__dict__.items() if name in self.crossover_arg_names}
+#
+#   def to_json(self):
+#     pass
+#
+#   def copy(self):
+#     return Gene(shape=self.shape, datatype=self.datatype, default=self.default,
+#                 initializer=self.initializer, mutator=self.mutator, crosser=self.crosser)
+#
+#
+# class Genome(Gene, dict):
+#   def __init__(self,
+#                datatype: type = float,
+#                default: any = None,
+#                initializer: base_init_class = None,
+#                mutator: base_mutate_class = None,
+#                crosser: base_crossover_class = None,
+#                **kwargs):
+#     super().__init__(shape=None, datatype=datatype, default=default,
+#                      initializer=initializer, mutator=mutator,
+#                      crosser=crosser, **kwargs)
+#
+#   def add_gene(self, gene: Gene, name: str):
+#     self[name] = gene
+#
+#   # Returns initializers for all genes
+#   # Prioritize gene-level initializers, then genome-level
+#   def get_initializers(self):
+#     return {name: gene.initializer if gene.initializer is not None else self.initializer for name, gene in self.items()}
+#
+#   def get_mutators(self):
+#     return {name: gene.mutator if gene.mutator is not None else self.mutator for name, gene in self.items()}
+#
+#   def get_crossers(self):
+#     return {name: gene.crosser if gene.crosser is not None else self.crosser for name, gene in self.items()}
+#
+#   def get_run_args(self, gene_name: str, class_: callable) -> dict[str, any]:
+#     gene = self[gene_name]
+#     arg_names = inspect.getfullargspec(class_.run).args
+#     arg_vals = {name: self.__dict__[name] if name in self.__dict__ else None for name in arg_names}
+#     arg_vals = {name: gene.__dict__[name] if name in gene.__dict__ else None for name in arg_names}
+#     if 'self' in arg_vals.keys():
+#       del arg_vals['self']
+#     return arg_vals
+#
+#   def initialize(self, iteration: int) -> Parameters:
+#     new_params = Parameters(iteration=iteration)
+#
+#     # Set proper initializers & arguments for all genes
+#     initializers = self.get_initializers()
+#     # args = self.get_run_args(initializers)
+#     for gene_name, initializer in initializers.items():
+#       if initializer is None:
+#         raise Exception(f"Genome initializer not defined for gene {gene_name}")
+#
+#       args = self.get_run_args(gene_name, initializer)
+#       new_params[gene_name] = initializer.run(**args)
+#
+#     return new_params
+#
+#   def mutate(self, params: Parameters) -> any:
+#     # Set proper mutators
+#     mutators = self.get_mutators()
+#     for gene_name, mutator in mutators.items():
+#       if mutator is None:
+#         raise Exception(f"Genome mutator not defined for gene {gene_name}")
+#
+#       args = self.get_run_args(gene_name, mutator)
+#       if 'param' in args.keys():
+#         del args['param']
+#       params[gene_name] = mutator.run(params[gene_name], **args)
+#     return params
+#
+#   def crossover(self, parents: list[Parameters], iteration: int) -> any:
+#     new_params = Parameters(iteration=iteration)
+#
+#     # Set proper crossovers
+#     crossovers = self.get_crossers()
+#     # args = self.get_run_args(crossovers)
+#     for gene_name, crossover in crossovers.items():
+#       if crossover is None:
+#         raise Exception(f"Genome crossover not defined for gene {gene_name}")
+#
+#       args = self.get_run_args(gene_name, crossover)
+#       if 'parents' in args.keys():
+#         del args['parents']
+#       parent_params = [parent[gene_name] for parent in parents]
+#       new_params[gene_name] = crossover.run(parent_params, **args)
+#     return new_params
+#
+#   def decay_mutators(self):
+#     mutators = self.get_mutators()
+#     for mutator in mutators.values():
+#       mutator.decay_mutation_rate()
+#
+#   def copy(self):
+#     new_genome = Genome(shape=self.shape, datatype=self.datatype, default=self.default,
+#                         initializer=self.initializer, mutator=self.mutator, crosser=self.crosser)
+#     for name, gene in self.items():
+#       new_genome.add_gene(gene.copy(), name)
+#     return new_genome
