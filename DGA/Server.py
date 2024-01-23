@@ -7,9 +7,9 @@ import portalocker
 import sys
 import argparse
 import time
-from DGA.File_IO import write_params_file, load_params_file, POOL_DIR, LOG_DIR, ARGS_FOLDER, POOL_LOCK_NAME, write_log, \
+from DGA.File_IO import write_params_file, load_params_file, POOL_DIR, LOG_DIR, RUN_INFO, POOL_LOCK_NAME, write_log, \
   write_model_args_to_file, load_model_args_from_file, read_run_status, write_run_status, write_pool_log, \
-  delete_params_file, write_error_log
+  delete_params_file, write_error_log, save_model, load_model
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
 
@@ -35,7 +35,7 @@ def dict_compare(d1, d2):
 
 
 class Server:
-  def __init__(self, run_name: str, algorithm: Algorithm | type, model: Model | type,
+  def __init__(self, run_name: str, algorithm: Algorithm | type, model: Model,
                num_parallel_processes: int, call_type: str = 'init',
                data_path: str = None, log_pool: int = -1, **kwargs):
 
@@ -56,7 +56,7 @@ class Server:
       # Retrieve args (set by the user) passed to Model and Algorithm objects
       algorithm_args = list_public_attributes(algorithm)
       algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
-      self.model_args = model.args_to_json() # {key: model.__dict__[key] for key in model_args}
+      # self.model_args = model.args_to_json() # {key: model.__dict__[key] for key in model_args}
 
       # Define paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = os.path.abspath(sys.modules[algorithm_type.__module__].__file__)
@@ -68,13 +68,13 @@ class Server:
       self.genome_name = genome_type.__name__
       self.gene_names = [gene_type.__name__ for gene_type in gene_types]
 
-      self.init(algorithm_type, algorithm_args, **kwargs)
+      self.init(algorithm_type, algorithm_args, model, **kwargs)
 
     elif call_type == "run_model":
       model_type = model    # Note: model will always be 'type' here, not object. 'run_model' called by Server not user
 
       # Set args passed to Model and Algorithm objects
-      self.model_args = kwargs.pop('model_args')
+      # self.model_args = kwargs.pop('model_args')
 
       # Reload paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
@@ -91,7 +91,7 @@ class Server:
       algorithm_type = algorithm    # Note: alg will always be 'type' here, not object. 'server_callback' called by Server not user
 
       # Set args passed to Model and Algorithm objects
-      self.model_args = kwargs.pop('model_args')
+      # self.model_args = kwargs.pop('model_args')
 
       # Reload paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
@@ -112,13 +112,13 @@ class Server:
   # 2. Create run status file. Status file represents state of genetic algorithm (sync. between all models)
   # 3. Generate initial params (and save updated status)
   # 4. Call models to run initial params
-  def init(self, algorithm_type: type, algorithm_args: dict, **kwargs):
+  def init(self, algorithm_type: type, algorithm_args: dict, model: Model, **kwargs):
 
     # Make directory if needed
     # TODO: This prevents continuing runs.
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
-    os.makedirs(file_path(self.run_name, ARGS_FOLDER), exist_ok=True)
+    os.makedirs(file_path(self.run_name, RUN_INFO), exist_ok=True)
 
     # Create run status file
     write_run_status(self.run_name, algorithm_args)
@@ -137,6 +137,9 @@ class Server:
     # Update status
     self.update_run_status(alg, algorithm_args.keys())
 
+    # Save model
+    save_model(self.run_name, model)
+
     # Call models to run initial params
     for i, p_name in enumerate(init_params):
       self.make_call(i, p_name, "run_model", **kwargs)
@@ -147,7 +150,7 @@ class Server:
     # model_runtime_args = kwargs['model_runtime_args']
     # print(self.run_name, kwargs)
     params_data = load_params_file(self.run_name, params_name)      # All params info (inc. fitness, etc.)
-    model = model_type(**self.model_args)
+    model = load_model(self.run_name) # model_type(**self.model_args)
 
     # Load data using file locks (presumably training data)
     data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
@@ -166,10 +169,10 @@ class Server:
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     with portalocker.Lock(pool_lock_path, timeout=10) as _:
       write_params_file(self.run_name, params_name, params_data)
-      write_log(self.run_name, kwargs['agent_id'], model.logger(fitness, iteration))
+      write_log(self.run_name, kwargs['agent_id'], model.logger(params_data))
 
     # Callback server
-    self.model_args = {key: model.__dict__[key] for key in self.model_args}    # Update args
+    # self.model_args = {key: model.__dict__[key] for key in self.model_args}    # Update args
     self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
 
   def server_callback(self, algorithm_type: type, **kwargs):
@@ -241,7 +244,7 @@ class Server:
                               algorithm_name=self.algorithm_name,
                               model_path=self.model_path,
                               model_name=self.model_name,
-                              model_args=self.model_args,
+                              # model_args=self.model_args,
                               genome_path=self.genome_path,
                               genome_name=self.genome_name,
                               gene_paths=self.gene_paths,
@@ -263,10 +266,21 @@ class Server:
 
   # Update status file with new args
   def update_run_status(self, algorithm: Algorithm, args: list):
+    print(f"before: {args}")
     algorithm_args = {key: algorithm.__dict__[key] for key in args}  # Update args
+    print(f"after: {algorithm_args['total_iter']}")
     write_run_status(self.run_name, algorithm_args)
 
 # Main function catches server-callbacks & runs models
+# NOTE:
+# When users define their own classes, they *must* not run the Server from the same file. A separate main.py file
+# should be made for this. The reason is a technical issue with Pickle and Python imports.
+# Source for explanation: https://stackoverflow.com/questions/50465106/attributeerror-when-reading-a-pickle-file
+#     - Briefly: When starting a run, if the custom objects (like Algorithms, Genomes, etc.) are loaded from a
+#       if __name__ == '__main__': block, then the pickle file will not be able to load the custom objects (see link
+#       for why). If the run code is not contained in __main__, then everytime we re-import the custom objects to reload
+#       them from the disk, the run code will be called again and probably crash your computer!
+# TODO: Make this safer ^
 if __name__ == '__main__':
   parser_ = argparse.ArgumentParser()
   parser_.add_argument('--agent_id', type=int)
@@ -275,6 +289,7 @@ if __name__ == '__main__':
 
   # Load args from file
   all_args = load_model_args_from_file(args_.agent_id, args_.run_name)
+  # print(all_args)
 
   # Establish location of Algorithm and Model classes & add them to python path
   algorithm_path_ = all_args['algorithm_path']
@@ -287,8 +302,10 @@ if __name__ == '__main__':
   gene_names_ = all_args['gene_names']
   server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
   base_path_ = '/'.join(server_path_.split('/')[0:-2])    # Get path to "./Distributed_GA" ie. base folder
-  alg_module_path_ = file_path(base_path_, '/'.join(algorithm_path_.split('/')[0:-1]))
-  model_module_path_ = file_path(base_path_, '/'.join(model_path_.split('/')[0:-1]))
+  alg_module_path_ = file_path(base_path_, '/'.join(algorithm_path_.split('/')))
+  model_module_path_ = file_path(base_path_, '/'.join(model_path_.split('/')))
+  genome_module_path_ = file_path(base_path_, '/'.join(genome_path_.split('/')))
+  model_module_name_ = model_module_path_.split('/')[-1][:-3]
   sys.path.append(alg_module_path_)
   sys.path.append(model_module_path_)
   sys.path.append(genome_path_)
@@ -299,19 +316,33 @@ if __name__ == '__main__':
   alg_module_name = algorithm_path_.split('/')[-1][:-3]
   model_module_name = model_path_.split('/')[-1][:-3]
   genome_module_name = genome_path_.split('/')[-1][:-3]
-  gene_module_names = [gene_path.split('/')[-1][:-3] for gene_path in gene_paths_]
-  algorithm_ = getattr(__import__(alg_module_name, fromlist=[alg_module_name]), algorithm_name_)
-  model_ = getattr(__import__(model_module_name, fromlist=[model_module_name]), model_name_)
-  genome_ = getattr(__import__(genome_module_name, fromlist=[genome_name_]), genome_name_)
-  genes_ = [getattr(__import__(gene_name_, fromlist=[gene_name_]), gene_name_) for gene_name_ in gene_module_names]
+  alg_module_ = __import__(alg_module_name)
+  # print(alg_module_name)
+  algorithm_ = getattr(alg_module_, algorithm_name_)
+  # print(algorithm_name_, alg_module_name)
+  model_module_ = __import__(model_module_name)
+  model_ = getattr(model_module_, model_name_)
+  genome_module_ = __import__(genome_module_name)
+  genome_ = getattr(genome_module_, genome_name_)
+  genes_ = [getattr(__import__(gene_name_), gene_name_) for gene_name_ in gene_names_]
+  # print("hello")
+  # algorithm_ = getattr(__import__(algorithm_name_, fromlist=[alg_module_name]), algorithm_name_)
+  # print(model_name_, model_module_name, "\n", algorithm_name_, alg_module_name)
+  # model_ = getattr(__import__("Testing_Model", fromlist=[model_module_name]), model_name_)
+  # genome_ = getattr(__import__(genome_name_, fromlist=[genome_module_name]), genome_name_)
+  # genes_ = [getattr(__import__(gene_name_, fromlist=[gene_name_]), gene_name_) for gene_name_ in gene_names_]
+  # print(sys.modules)
   all_args['algorithm'] = algorithm_
-  all_args['model'] = model_
+  all_args['model'] = load_model(all_args['run_name'])
   all_args['genome'] = genome_
   all_args['genes'] = genes_
+  # print(all_args['model'].args_to_json())
 
   # Run server protocol with bash kwargs
   try:
     Server(**all_args)
   except Exception as e:
+    from File_IO import jsonify
+    all_args = jsonify(all_args)
     write_error_log(all_args['run_name'], all_args)
     raise e

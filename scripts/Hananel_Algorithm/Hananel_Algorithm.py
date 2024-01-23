@@ -1,33 +1,6 @@
-from DGA.Model import Testing_Model
 from DGA.Algorithm import Genetic_Algorithm, get_pool_key
 from DGA.Gene import Genome, Gene, Parameters
-from DGA.Local import Synchronized
-from DGA.Server import Server
 import numpy as np
-
-
-# class merge_mutation(base_mutate_class):
-#   def __init__(self, mutation_rate: float = 0.1):
-#     super().__init__(mutation_rate)
-#
-#   def run(self, gene: Gene) -> Gene:
-#     pass
-#
-#
-# class multi_points_mutation(base_mutate_class):
-#   def __init__(self, mutation_rate: float = 0.1):
-#     super().__init__(mutation_rate)
-#
-#   def mutate(self, gene: Gene) -> Gene:
-#     pass
-#
-#
-# class custom_crossover(base_crossover_class):
-#   def __init__(self):
-#     super().__init__()
-#
-#   def crossover(self, gene1: Gene, gene2: Gene) -> Gene:
-#     pass
 
 
 class Hananel_Algorithm(Genetic_Algorithm):
@@ -249,22 +222,3 @@ class Hananel_Genome(Genome):
   # Decay mutation rate (unimplemented)
   def decay_mutators(self):
     pass
-
-
-if __name__ == '__main__':
-  # Run variables
-  VECTOR_SHAPE = (10, 10)
-
-  # Genome
-  genome = Hananel_Genome()
-  gene = Gene(shape=VECTOR_SHAPE, dtype=float, min_val=-10, max_val=10)
-  genome.add_gene(gene, 'vector_gene')
-
-  mod = Testing_Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
-  alg = Hananel_Algorithm(genome=genome, num_params=10, iterations_per_epoch=10_000, epochs=5, plateau_warmup=100,)
-  parallel_runner = Server(run_name="Hananel_Alg", algorithm=alg, model=mod, num_parallel_processes=4)
-  # sync_runner = Synchronized(run_name="Hananel_Alg", algorithm=alg, model=mod)
-  # sync_runner.run()
-
-  # from DGA.Plotting import plot_model_logs
-  # plot_model_logs(run_dir="Hananel_Alg", num_models=1)

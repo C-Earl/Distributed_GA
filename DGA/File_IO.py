@@ -1,6 +1,7 @@
 import os
 from os.path import join as file_path
 from DGA.Gene import Gene, Genome, Parameters
+from DGA.Model import Model
 import pickle
 import json
 import jsbeautifier
@@ -11,7 +12,7 @@ import ast
 # Constants for filesystem
 POOL_DIR = "pool"
 LOG_DIR = "logs"
-ARGS_FOLDER = "run_args"
+RUN_INFO = "run_info"
 POOL_LOG_NAME = "POOL_LOG.log"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
 DATA_LOCK_NAME = "DATA_LOCK.lock"
@@ -22,19 +23,23 @@ AGENT_NAME = "AGENT"
 
 # Transform any non-json compatible types
 def jsonify(d: dict):
-  for k, v in d.items():
-    if isinstance(v, dict):   # Recursively jsonify
+  if isinstance(d, dict):
+    for k, v in d.items():
       d[k] = jsonify(v)
-    elif isinstance(v, np.ndarray):
-      d[k] = v.tolist()
-    elif isinstance(v, type):
-      d[k] = str(v)
-    elif isinstance(v, Genome):
-      d[k] = v.to_json()
-    elif isinstance(v, Gene):
-      d[k] = v.to_json()
-    if (isinstance(v, Parameters)):
-      print("hi")
+  elif isinstance(d, list):
+    return [jsonify(i) for i in d]
+  elif isinstance(d, np.ndarray):
+    return d.tolist()
+  elif isinstance(d, type):
+    return str(d)
+  elif isinstance(d, Genome):
+    return d.to_json()
+  elif isinstance(d, Gene):
+    return d.to_json()
+  elif isinstance(d, Model):
+    return d.args_to_json()
+  # if (isinstance(v, Parameters)):
+  #   print("hi")
   # print(d)
   return d
 
@@ -44,12 +49,12 @@ def write_model_args_to_file(agent_id: int, **kwargs):
   kwargs['agent_id'] = agent_id
 
   # Write to pkl
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"{AGENT_NAME}_{agent_id}_args.pkl")
+  args_path = file_path(kwargs['run_name'], RUN_INFO, f"{AGENT_NAME}_{agent_id}_args.pkl")
   with open(args_path, 'wb') as args_file:
     pickle.dump(kwargs, args_file)
 
   # Write to json
-  args_path = file_path(kwargs['run_name'], ARGS_FOLDER, f"{AGENT_NAME}_{agent_id}_args.json")
+  args_path = file_path(kwargs['run_name'], RUN_INFO, f"{AGENT_NAME}_{agent_id}_args.json")
   kwargs_json = jsonify(copy.deepcopy(kwargs))
   with open(args_path, 'w') as args_file:
     json.dump(kwargs_json, args_file, indent=2)
@@ -57,7 +62,7 @@ def write_model_args_to_file(agent_id: int, **kwargs):
 
 # Server writes args to file, model process the loads with this function
 def load_model_args_from_file(agent_id: int, run_name: str):
-  args_path = file_path(run_name, ARGS_FOLDER, f"{AGENT_NAME}_{agent_id}_args.pkl")   # Only load from pickle file
+  args_path = file_path(run_name, RUN_INFO, f"{AGENT_NAME}_{agent_id}_args.pkl")   # Only load from pickle file
   with open(args_path, 'rb') as args_file:
     return pickle.load(args_file)
 
@@ -150,3 +155,16 @@ def write_error_log(run_name: str, error_log: dict):
   log_path = file_path(run_name, LOG_DIR, ERROR_LOG_NAME)
   with open(log_path, 'a') as log_file:
     log_file.write(json.dumps(error_log_copy) + "\n")
+
+
+def save_model(run_name: str, model: Model):
+  model_path = file_path(run_name, RUN_INFO, f"model.pkl")
+  with open(model_path, 'wb') as model_file:
+    pickle.dump(model, model_file)
+
+
+def load_model(run_name: str):
+  model_path = file_path(run_name, RUN_INFO, f"model.pkl")
+  with open(model_path, 'rb') as model_file:
+    model = pickle.load(model_file)
+  return model

@@ -1,6 +1,5 @@
 from abc import abstractmethod
 from DGA.Gene import Parameters, Genome
-from DGA.File_IO import load_params_file
 import numpy as np
 import time
 
