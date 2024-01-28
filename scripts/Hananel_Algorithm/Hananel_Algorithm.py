@@ -11,8 +11,12 @@ class Hananel_Algorithm(Genetic_Algorithm):
                num_params: int,  # Number of Parameters in pool
 
                # Hananel Algorithm Parameters
+               # mutation_rate: float,  # Mutation rate
+               # crossover_rate: float,  # Crossover rate
                iterations_per_epoch: int,  # Number of iterations per epoch
                epochs: int,  # Number of epochs to run
+               mutation_decay: float = 1,  # Optional: Rate of decay for mutation rate
+               crossover_decay: float = 1,  # Optional: Rate of decay for crossover rate
                num_parents: int = 2,  # Number of parents to select for breeding
                diversity_threshold: float = 0.1,  # Threshold for diversity
                diversity_method: str = 'euclidean',  # Optional: Method for calculating diversity
@@ -50,8 +54,11 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.epoch_iter += 1
     self.total_iter += 1
     self.agent_iterations[agent_id] += 1
-    matrix_pool = np.ndarray([params.as_array() for params in self.valid_parents.values()])
-    self.diversity_matrix = distance.cdist(matrix_pool, matrix_pool, self.diversity_method)
+
+    # If pool initialized, start calculating diversity matrix
+    if not (len(self.pool.items()) < self.num_params):
+      matrix_pool = np.vstack([params.as_array() for params in self.valid_parents.values()])
+      self.diversity_matrix = distance.cdist(matrix_pool, matrix_pool, self.diversity_method)
 
     # Filter out prior epoch Parameters
     # Param already written to file & logged, so remove from pool & generate new init param
@@ -119,7 +126,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
         [np.linalg.norm(param - founder_param[param_name]) for founder_param in self.founders_pool.values()])
     return -penalty
 
-  # Begin a new epoch, and return theparams first params of that epoch
+  # Begin a new epoch, and return the params first params of that epoch
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
     self.epoch_iter = 0
@@ -158,10 +165,20 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Outputs: list of Parameters (self.num_parents long)
   def select_parents(self) -> list[Parameters]:
     # TODO: Change according to age of Parameter (iteration)
+
+    # Get (normalized) fitness scores
     params_list = list(self.valid_parents.values())
-    fitness_scores = [params.fitness for params in params_list]
+    fitness_scores = [params.fitness + params.proximity_penalty for params in params_list]
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
-    probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
+
+    # Get (normalized) diversity scores
+    normalized_dmat = (self.diversity_matrix - self.diversity_matrix.min()) / (
+        self.diversity_matrix.max() - self.diversity_matrix.min())  # Normalize to [0, 1]
+    param_diversities = np.array([param_div.mean() for param_div in normalized_dmat])
+
+    # Calculate probabilities
+    probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
+    probabilities /= np.sum(normed_fitness + param_diversities)
     parent_inds = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities,
                                    size=self.num_parents)
     return [params_list[i] for i in parent_inds]
@@ -193,10 +210,10 @@ class Hananel_Algorithm(Genetic_Algorithm):
     sorted_params = sorted(params_list.items(), key=lambda x: x[1].fitness + x[1].proximity_penalty, reverse=True)
     return sorted_params
 
-  def pos_normalize(self, values):
+  def pos_normalize(self, values) -> np.ndarray:
     min_v = min(values)
     if min_v < 0:
-      return [i + abs(min_v) for i in values]
+      return np.array([i + abs(min_v) for i in values])
     else:
       return values
 
