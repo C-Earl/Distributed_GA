@@ -1,5 +1,6 @@
 from DGA.Algorithm import Genetic_Algorithm, get_pool_key
 from DGA.Gene import Genome, Gene, Parameters
+from scipy.spatial import distance
 import numpy as np
 
 
@@ -14,6 +15,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
                epochs: int,  # Number of epochs to run
                num_parents: int = 2,  # Number of parents to select for breeding
                diversity_threshold: float = 0.1,  # Threshold for diversity
+               diversity_method: str = 'euclidean',  # Optional: Method for calculating diversity
                cross_points: int = 1,  # Optional: Number of crossover points if provided
                plateau_range: int = 100,  # Optional: Number of iterations to check for plateau
                plateau_sensitivity: float = 1e-5,  # Optional: Slope threshold for plateau detection
@@ -25,6 +27,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
                      history=True, log_vars=['proximity_penalty'], **kwargs)
 
     self.diversity_threshold = diversity_threshold
+    self.diversity_method = diversity_method
     self.cross_points = cross_points
     self.iterations_per_epoch = iterations_per_epoch
     self.epochs = epochs
@@ -37,22 +40,40 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.founders_pool = {}  # Pool of top scoring Parameters from previous epochs
     self.diversity_matrix = np.zeros((self.num_params, self.num_params))  # Distance between all params
     self.fitness_history = np.zeros((self.num_params, plateau_range))     # Record of past fitness (per agent)
+    self.agent_iterations = np.zeros(self.num_params, dtype=int)          # Iterations per agent (per epoch)
 
   # Fetch a new Parameters from pool for testing.
   # Inputs: None
   # Outputs: tuple of (params_name, success_flag)
   def fetch_params(self, **kwargs) -> tuple:
+    agent_id = kwargs['agent_id']
     self.epoch_iter += 1
     self.total_iter += 1
-    # self.diversity_matrix = ?
+    self.agent_iterations[agent_id] += 1
+    matrix_pool = np.ndarray([params.as_array() for params in self.valid_parents.values()])
+    self.diversity_matrix = distance.cdist(matrix_pool, matrix_pool, self.diversity_method)
+
+    # Filter out prior epoch Parameters
+    # Param already written to file & logged, so remove from pool & generate new init param
+    for param_key, param in self.valid_parents.items():
+      if param.epoch < self.current_epoch:
+        del self.pool[param_key]
+        new_params = self.spawn(self.total_iter)
+        params_name = get_pool_key(new_params)
+        new_params.set_attribute('agent_id', agent_id)
+        new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
+        new_params.set_attribute('epoch', self.current_epoch)
+        self.pool[params_name] = new_params
+        return params_name, True
 
     # TODO: Make so server handles first two if cases
     # If pool is uninitialized, initialize new Parameters
     if len(self.pool.items()) < self.num_params:
       new_params = self.spawn(self.total_iter)
       params_name = get_pool_key(new_params)
-      new_params.set_attribute('agent_id', self.agent_id)
+      new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
+      new_params.set_attribute('epoch', self.current_epoch)
       self.pool[params_name] = new_params
       return params_name, True
 
@@ -63,12 +84,13 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return None, False
 
     # If epoch over (iterations)
-    elif self.epoch_iter >= self.iterations_per_epoch or self.agent_converged():
+    elif self.epoch_iter >= self.iterations_per_epoch or self.agent_converged(agent_id):
       self.start_new_epoch()
       new_params = self.spawn(self.total_iter)
       params_name = get_pool_key(new_params)
-      new_params.set_attribute('agent_id', self.agent_id)
+      new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
+      new_params.set_attribute('epoch', self.current_epoch)
       self.pool[params_name] = new_params
       return params_name, True
 
@@ -76,8 +98,9 @@ class Hananel_Algorithm(Genetic_Algorithm):
     else:
       new_params = self.breed(self.total_iter)
       params_name = get_pool_key(new_params)
-      new_params.set_attribute('agent_id', self.agent_id)
+      new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
+      new_params.set_attribute('epoch', self.current_epoch)
       while params_name in self.pool.keys():  # Keep attempting until unique
         new_params = self.breed(self.total_iter)
         params_name = get_pool_key(new_params)
@@ -100,7 +123,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
     self.epoch_iter = 0
-    self.fitness_history = np.zeros((self.num_params, self.plateau_range))  # Reset fitness history
+    self.agent_iterations = np.zeros(self.num_params, dtype=int)  # Reset agent iterations
 
     # Move top scoring params to founders pool
     sorted_params = self.sort_params(self.valid_parents)
@@ -151,13 +174,17 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return True
 
   # Check an agents history for plateau-ing (convergence)
-  def agent_converged(self) -> bool:
-    agent_history = self.history[self.agent_id][-self.plateau_range:]
-    fitness_history = np.array([params.fitness for params in agent_history])
+  def agent_converged(self, agent_id: int) -> bool:
+    # Check if agent has tested enough params
+    num_tested = self.agent_iterations[agent_id]
+    if num_tested < self.plateau_warmup:
+      return False
 
-    # Check for 'plateau' in fitness history
+    # Check for plateaus
+    agent_history = self.history[agent_id][-num_tested:]
+    fitness_history = np.array([log['fitness'] for log in agent_history])
     coefs = np.polyfit(np.arange(len(fitness_history)), fitness_history, 1)
-    if coefs[0] < self.plateau_sensitivity and self.epoch_iter > self.plateau_warmup:
+    if coefs[0] < self.plateau_sensitivity:
       return True     #  If slope of fitness curve is less than threshold, return True
     else:
       return False    # Otherwise, return False

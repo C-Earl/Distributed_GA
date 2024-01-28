@@ -19,7 +19,7 @@ class Synchronized:
 
     # Initialize class vars
     self.run_name = run_name
-    self.algorithm = alg_type(**algorithm_args, run_name=run_name, agent_id=0)
+    self.algorithm = alg_type(**algorithm_args, run_name=run_name)
     self.model = model
     self.pool = Pool()
     self.algorithm.pool = self.pool
@@ -48,7 +48,7 @@ class Synchronized:
       self.iteration += 1
 
       # Generate & test gene (+ update pool)
-      gene_name, _ = self.algorithm.fetch_params()
+      gene_name, _ = self.algorithm.fetch_params(agent_id=0)
       fitness = self.model.run(self.pool[gene_name])
       self.pool[gene_name].set_fitness(fitness)
       self.pool[gene_name].set_tested(True)
@@ -57,7 +57,7 @@ class Synchronized:
       # Log & update history
       self.log.append(self.model.logger(self.pool[gene_name]))
       if self.algorithm.history is not None:
-        self.algorithm.history[0].append(self.pool[gene_name])
+        self.algorithm.history[0].append(self.log[-1])
 
     # Write log to file
     # Set to model_0, implies only one model made whole run

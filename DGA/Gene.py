@@ -136,6 +136,9 @@ class Parameters(dict):
     else:
       self.tested_ = True
 
+  def as_array(self) -> np.ndarray:
+    return np.concatenate([param.flatten() for param in self.values()])
+
   def set_fitness(self, fitness: float):
     self.fitness = fitness
     self.tested_ = True

@@ -2,6 +2,7 @@ import os
 from os.path import join as file_path
 from DGA.Gene import Gene, Genome, Parameters
 from DGA.Model import Model
+from DGA.Pool import Pool
 import pickle
 import json
 import jsbeautifier
@@ -38,9 +39,6 @@ def jsonify(d: dict):
     return d.to_json()
   elif isinstance(d, Model):
     return d.args_to_json()
-  # if (isinstance(v, Parameters)):
-  #   print("hi")
-  # print(d)
   return d
 
 
@@ -92,28 +90,28 @@ def delete_params_file(run_name: str, params_name: str):
   return True
 
 
-# Read status of run to file (only read pickle file)
-def read_run_status(run_name: str):
-  status_path = file_path(run_name, RUN_STATUS_NAME_PKL)
-  with open(status_path, 'rb') as status_file:
-    run_status = pickle.load(status_file)
-  return run_status
-
-
-# Write status of run to pickle file for loading, and json file for human readability
-def write_run_status(run_name: str, status: dict):
-  # Write to pkl
-  status_path = file_path(run_name, RUN_STATUS_NAME_PKL)
-  with open(status_path, 'wb') as status_file:
-    pickle.dump(status, status_file)
-
-  # Write to json
-  status_copy = jsonify(copy.deepcopy(status))
-  status_path = file_path(run_name, RUN_STATUS_NAME_JSON)
-  options = jsbeautifier.default_options()
-  options.indent_size = 2
-  with open(status_path, 'w') as status_file:
-    status_file.write(jsbeautifier.beautify(json.dumps(status_copy), options))
+# # Read status of run to file (only read pickle file)
+# def read_run_status(run_name: str):
+#   status_path = file_path(run_name, RUN_STATUS_NAME_PKL)
+#   with open(status_path, 'rb') as status_file:
+#     run_status = pickle.load(status_file)
+#   return run_status
+#
+#
+# # Write status of run to pickle file for loading, and json file for human readability
+# def write_run_status(run_name: str, status: dict):
+#   # Write to pkl
+#   status_path = file_path(run_name, RUN_STATUS_NAME_PKL)
+#   with open(status_path, 'wb') as status_file:
+#     pickle.dump(status, status_file)
+#
+#   # Write to json
+#   status_copy = jsonify(copy.deepcopy(status))
+#   status_path = file_path(run_name, RUN_STATUS_NAME_JSON)
+#   options = jsbeautifier.default_options()
+#   options.indent_size = 2
+#   with open(status_path, 'w') as status_file:
+#     status_file.write(jsbeautifier.beautify(json.dumps(status_copy), options))
 
 
 # Write to model log file
@@ -167,4 +165,17 @@ def load_model(run_name: str):
   model_path = file_path(run_name, RUN_INFO, f"model.pkl")
   with open(model_path, 'rb') as model_file:
     model = pickle.load(model_file)
+  return model
+
+
+def save_algorithm(run_name: str, algorithm):
+  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  with open(alg_path, 'wb') as alg_file:
+    pickle.dump(algorithm, alg_file)
+
+
+def load_algorithm(run_name: str):
+  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  with open(alg_path, 'rb') as alg_file:
+    model = pickle.load(alg_file)
   return model

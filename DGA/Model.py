@@ -15,7 +15,7 @@ def list_public_attributes(input_var):
 class Model():
 
   def __init__(self):
-    self.log_vars = []    # List of variables to log
+    self.log_vars = ["timestamp", "fitness", "iteration"]    # List of variables to log
     super().__init__()
 
   # Load data (will only be called with proper filelock)
