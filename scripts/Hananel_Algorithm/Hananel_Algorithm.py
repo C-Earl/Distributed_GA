@@ -59,6 +59,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     if not (len(self.pool.items()) < self.num_params):
       matrix_pool = np.vstack([params.as_array() for params in self.valid_parents.values()])
       self.diversity_matrix = distance.cdist(matrix_pool, matrix_pool, self.diversity_method)
+      # Why "- self.diversity_matrix.shape[0]" ?
       diversity = self.diversity_matrix.sum() / (self.diversity_matrix.size - self.diversity_matrix.shape[0])
       self.diversity_history.append(diversity)
 
@@ -148,14 +149,18 @@ class Hananel_Algorithm(Genetic_Algorithm):
   def breed(self, iteration: int) -> Parameters:
     # Create new offspring
     parents = self.select_parents()
-    offspring = self.crossover(parents, iteration)
+    offspring = self.genome.crossover(parents, iteration)
 
     # Apply mutation with 'mutation rate'% chance
     if np.random.rand() < self.mutation_rate:
-      offspring = self.mutate(offspring)
+      offspring = self.genome.mutate(offspring)
+
+    offspring.as_array()
 
     ### IMPLEMENT ME ###
     # Apply merge_mutate, multipoint_mutate, etc. here
+    # Access genome functions with: self.genome.<function_name>(<args>)
+    # Example: self.genome.merge_mutate(offspring)
 
     return offspring
 
@@ -183,6 +188,8 @@ class Hananel_Algorithm(Genetic_Algorithm):
 
     ### IMPLEMENT ME ###
     # Apply age penalty here
+    # 'Age' of Parameters stored as 'iteration' attribute: params.iteration
+    # Sorting pool params by iteration:
 
     # Calculate probabilities
     probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
@@ -191,11 +198,11 @@ class Hananel_Algorithm(Genetic_Algorithm):
                                    size=self.num_parents)
     return [params_list[i] for i in parent_inds]
 
-  # End condition for run
+  # End condition for run. Ends when all epochs complete
   # Inputs: None
   # Outputs: bool (True if run should end)
   def end_condition(self):
-    if self.current_epoch == self.epochs:
+    if self.current_epoch == (self.epochs-1) and self.epoch_iter == (self.iterations_per_epoch-1):
       return True
 
   # Check an agents history for plateau-ing (convergence)
@@ -225,4 +232,3 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return np.array([i + abs(min_v) for i in values])
     else:
       return values
-
