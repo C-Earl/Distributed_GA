@@ -176,6 +176,9 @@ class Hananel_Algorithm(Genetic_Algorithm):
         self.diversity_matrix.max() - self.diversity_matrix.min())  # Normalize to [0, 1]
     param_diversities = np.array([param_div.mean() for param_div in normalized_dmat])
 
+    # (Apply age penalty here)
+
+
     # Calculate probabilities
     probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
     probabilities /= np.sum(normed_fitness + param_diversities)
@@ -206,6 +209,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     else:
       return False    # Otherwise, return False
 
+  # Takes a dictionary of Parameters, returns a list of tuples containing the key of the Parameter and the Parameter
   def sort_params(self, params_list: dict[str, Parameters]) -> list[tuple[str, Parameters]]:
     sorted_params = sorted(params_list.items(), key=lambda x: x[1].fitness + x[1].proximity_penalty, reverse=True)
     return sorted_params
@@ -216,53 +220,3 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return np.array([i + abs(min_v) for i in values])
     else:
       return values
-
-
-class Hananel_Genome(Genome):
-  def __init__(self):
-    super().__init__()
-
-  # Called when a new Parameters is needed, and no other Parameters in pool
-  # Inputs: iteration
-  # Outputs: new Parameters
-  def initialize(self, iteration: int) -> Parameters:
-    new_params = Parameters(iteration=iteration)
-    for gene_name, gene in self.items():
-      gdefault = gene.default
-      if gdefault is not None:    # If default value is provided, use it
-        new_params[gene_name] = gdefault
-      else:
-        gshape = gene.shape       # Otherwise, uniform generate values in gene range
-        gmin = gene.min_val
-        gmax = gene.max_val
-        gtype = gene.dtype
-        new_params[gene_name] = np.random.uniform(low=gmin, high=gmax, size=gshape).astype(gtype)
-    return new_params
-
-  # Takes in a Parameters object and mutates it (Note: Returns same Parameters object)
-  # Inputs: Parameters
-  # Outputs: Parameters (mutated)
-  def mutate(self, params: Parameters) -> Parameters:
-    for gene_name, gene in self.items():
-      gshape = gene.shape
-      gtype = gene.dtype      # Apply uniform mutation to each gene
-      params[gene_name] += np.random.uniform(low=-1, high=+1, size=gshape).astype(gtype)
-    return params
-
-  # Takes in a Parameters object and crosses it with another Parameters object
-  # Inputs: list of Parameters (parents)
-  # Outputs: Parameters (offspring)
-  def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
-    p1, p2 = parents[0], parents[1]  # Only two parents used for now, change later
-    child_params = Parameters(iteration=iteration)
-    for gene_name, gene in self.items():
-      gshape = p1[gene_name].shape
-      full_index = np.prod(gshape)
-      splice = np.random.randint(low=0, high=full_index)
-      new_param = np.concatenate([p1[gene_name].flatten()[:splice], p2[gene_name].flatten()[splice:]])
-      child_params[gene_name] = new_param.reshape(gshape)
-    return child_params
-
-  # Decay mutation rate (unimplemented)
-  def decay_mutators(self):
-    pass
