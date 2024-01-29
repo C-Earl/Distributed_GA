@@ -85,7 +85,7 @@ class Genetic_Algorithm_Base:
     if history:
       self.history = self.load_history()
     else:
-      self.history = False
+      self.history = None
 
     # Initialize logging vars
     self.log_vars = ['timestamp', 'fitness', 'iteration']

@@ -40,7 +40,7 @@ class Synchronized:
   def run(self):
 
     # Set history for agent 0
-    if self.algorithm.history:
+    if self.algorithm.history is not None:
       self.algorithm.history[0] = []
 
     # Loop until end condition met
@@ -56,7 +56,7 @@ class Synchronized:
 
       # Log & update history
       self.log.append(self.model.logger(self.pool[gene_name]))
-      if self.algorithm.history:
+      if self.algorithm.history is not None:
         self.algorithm.history[0].append(self.log[-1])
 
     # Write log to file

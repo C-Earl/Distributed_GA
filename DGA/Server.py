@@ -172,7 +172,7 @@ class Server:
         # Setup algorithm by loading from file
         # - updates pool and history based on files which other agents may have changed
         alg = load_algorithm(self.run_name)
-        if alg.history:
+        if alg.history is not None:
           alg.history.update(alg.load_history())
         alg.pool.update(alg.load_pool())
         alg.pool.update_subpools()

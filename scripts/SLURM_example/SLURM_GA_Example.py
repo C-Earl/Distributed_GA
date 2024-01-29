@@ -16,9 +16,9 @@ if __name__ == '__main__':
 
   mod = Testing_Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
   alg = Genetic_Algorithm(genome=genome, num_params=10, iterations=1_000)
-  parallel_runner = Server(run_name="SLURM_run", algorithm=alg, model=mod, num_parallel_processes=4)
-  # sync_runner = Synchronized(run_name="SLURM_run", algorithm=alg, model=mod)
-  # sync_runner.run()
-  #
-  # from DGA.Plotting import plot_model_logs
-  # plot_model_logs(run_dir="SLURM_run", num_models=1)
+  # parallel_runner = Server(run_name="SLURM_run", algorithm=alg, model=mod, num_parallel_processes=4)
+  sync_runner = Synchronized(run_name="SLURM_run", algorithm=alg, model=mod)
+  sync_runner.run()
+
+  from DGA.Plotting import plot_model_logs
+  plot_model_logs(run_dir="SLURM_run", num_models=1)

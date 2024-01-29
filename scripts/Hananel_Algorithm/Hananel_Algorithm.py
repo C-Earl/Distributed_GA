@@ -68,7 +68,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
       if param.epoch < self.current_epoch:
         del self.pool[param_key]
         new_params = self.spawn(self.total_iter)
-        params_name = hash(new_params)
+        params_name = str(hash(new_params))
         new_params.set_attribute('agent_id', agent_id)
         new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
         new_params.set_attribute('epoch', self.current_epoch)
@@ -79,7 +79,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     # If pool is uninitialized, initialize new Parameters
     if len(self.pool.items()) < self.num_params:
       new_params = self.spawn(self.total_iter)
-      params_name = hash(new_params)
+      params_name = str(hash(new_params))
       new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
       new_params.set_attribute('epoch', self.current_epoch)
@@ -96,7 +96,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     elif self.epoch_iter >= self.iterations_per_epoch or self.agent_converged(agent_id):
       self.start_new_epoch()
       new_params = self.spawn(self.total_iter)
-      params_name = hash(new_params)
+      params_name = str(hash(new_params))
       new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
       new_params.set_attribute('epoch', self.current_epoch)
@@ -106,13 +106,10 @@ class Hananel_Algorithm(Genetic_Algorithm):
     # Otherwise, breed new offspring
     else:
       new_params = self.breed(self.total_iter)
-      params_name = hash(new_params)
+      params_name = str(hash(new_params))
       new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
       new_params.set_attribute('epoch', self.current_epoch)
-      while params_name in self.pool.keys():  # Keep attempting until unique
-        new_params = self.breed(self.total_iter)
-        params_name = hash(new_params)
 
       # Remove worst Parameters from the pool
       self.trim_pool()
