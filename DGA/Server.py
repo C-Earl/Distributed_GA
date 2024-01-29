@@ -35,7 +35,7 @@ def dict_compare(d1, d2):
 
 
 class Server:
-  def __init__(self, run_name: str, algorithm: Algorithm | type, model: Model,
+  def __init__(self, run_name: str, algorithm: Algorithm, model: Model,
                num_parallel_processes: int, call_type: str = 'init',
                data_path: str = None, log_pool: int = -1, **kwargs):
 
@@ -71,10 +71,7 @@ class Server:
       self.init(algorithm_type, algorithm_args, model, **kwargs)
 
     elif call_type == "run_model":
-      model_type = model    # Note: model will always be 'type' here, not object. 'run_model' called by Server not user
-
-      # Set args passed to Model and Algorithm objects
-      # self.model_args = kwargs.pop('model_args')
+      # model_type = model    # Note: model will always be 'type' here, not object. 'run_model' called by Server not user
 
       # Reload paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
@@ -85,7 +82,7 @@ class Server:
       self.model_name = kwargs.pop('model_name')
       self.genome_name = kwargs.pop('genome_name')
       self.gene_names = kwargs.pop('gene_names')
-      self.run_model(model_type, **kwargs)
+      self.run_model(**kwargs)
 
     elif call_type == "server_callback":
       # algorithm_type = algorithm    # Note: alg will always be 'type' here, not object. 'server_callback' called by Server not user
@@ -120,9 +117,6 @@ class Server:
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, RUN_INFO), exist_ok=True)
 
-    # Create run status file
-    # write_run_status(self.run_name, algorithm_args)
-
     # Generate initial params
     alg = algorithm_type(run_name=self.run_name, **algorithm_args)
     original_pool = copy.deepcopy(alg.pool)
@@ -130,24 +124,19 @@ class Server:
     for i in range(self.num_parallel_processes):
       init_params.append(alg.fetch_params(agent_id=i)[0])    # Don't need status on init, just params
 
-    # Update pool files
+    # Update pool files (Parameter files)
     final_pool = alg.pool
     self.update_pool(original_pool, final_pool)
 
-    # # Update status
-    # self.update_run_status(alg, algorithm_args.keys())
-
-    # Save algorithm
+    # Save algorithm & model to files
     save_algorithm(self.run_name, alg)
-
-    # Save model
     save_model(self.run_name, model)
 
     # Call models to run initial params
     for i, p_name in enumerate(init_params):
       self.make_call(i, p_name, "run_model", **kwargs)
 
-  def run_model(self, model_type: type, **kwargs):
+  def run_model(self, **kwargs):
     # Setup model
     params_name = kwargs['params_name']
     params = load_params_file(self.run_name, params_name)      # All params info (inc. fitness, etc.)
@@ -163,7 +152,6 @@ class Server:
     fitness = model.run(params, **runtime_args, **kwargs)
 
     # Return fitness (by writing to files)
-    # iteration = params.iteration
     params.set_fitness(fitness)
     params.set_tested(True)
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
@@ -172,8 +160,6 @@ class Server:
       write_log(self.run_name, kwargs['agent_id'], model.logger(params))
 
     # Callback server
-    # self.model_args = {key: model.__dict__[key] for key in self.model_args}    # Update args
-    # print(kwargs)
     self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
 
   def server_callback(self, **kwargs):
@@ -183,22 +169,22 @@ class Server:
     while True:
       with portalocker.Lock(pool_lock_path, timeout=100) as _:
 
-        # Setup algorithm & get copy of original pool state
-        # algorithm_args = read_run_status(self.run_name)
-        # alg = algorithm_type(run_name=self.run_name, **algorithm_args)
-        # Update main pool from files
+        # Setup algorithm by loading from file
+        # - updates pool and history based on files which other agents may have changed
         alg = load_algorithm(self.run_name)
-        alg.history.update(alg.load_history())
+        if alg.history:
+          alg.history.update(alg.load_history())
         alg.pool.update(alg.load_pool())
         alg.pool.update_subpools()
 
+        # Copy pool for later comparison when updating files
         orginal_pool = copy.deepcopy(alg.pool)
 
         # Check if run is complete
         if alg.end_condition():
           sys.exit()
 
-        # Prune pool and generate next params for testing
+        # Generate next params for testing
         params_name, success = alg.fetch_params(agent_id=kwargs['agent_id'])
 
         # Update status & break if fetch was success, otherwise try again
@@ -208,13 +194,10 @@ class Server:
           final_pool = alg.pool
           self.update_pool(orginal_pool, final_pool)
 
-          # Update pool log
+          # Update pool log & save alg to file
           if self.log_pool != -1 and alg.current_iter % self.log_pool == 0:
             write_pool_log(self.run_name, alg.pool)
-
-          # Update run status
           save_algorithm(self.run_name, alg)
-          # self.update_run_status(alg, algorithm_args.keys())
 
           break
         else:
@@ -251,7 +234,6 @@ class Server:
                               algorithm_name=self.algorithm_name,
                               model_path=self.model_path,
                               model_name=self.model_name,
-                              # model_args=self.model_args,
                               genome_path=self.genome_path,
                               genome_name=self.genome_name,
                               gene_paths=self.gene_paths,
@@ -270,11 +252,6 @@ class Server:
                          shell=True)
     elif sys.platform == "darwin":
       pass    # MAC HANDLING
-
-  # Update status file with new args
-  # def update_run_status(self, algorithm: Algorithm, args: list):
-  #   algorithm_args = {key: algorithm.__dict__[key] for key in args}  # Update args
-  #   write_run_status(self.run_name, algorithm_args)
 
 # Main function catches server-callbacks & runs models
 # NOTE:
@@ -309,30 +286,26 @@ if __name__ == '__main__':
   alg_module_path_ = file_path(base_path_, '/'.join(algorithm_path_.split('/')[0:-1]))
   model_module_path_ = file_path(base_path_, '/'.join(model_path_.split('/')[0:-1]))
   genome_module_path_ = file_path(base_path_, '/'.join(genome_path_.split('/')[0:-1]))
-  model_module_name_ = model_module_path_.split('/')[-1][:-3]
+  # model_module_name_ = model_module_path_.split('/')[-1][:-3]
   sys.path.append(alg_module_path_)
   sys.path.append(model_module_path_)
-  sys.path.append(genome_path_)
+  sys.path.append(genome_module_path_)
   for gene_path in gene_paths_:
     sys.path.append(gene_path)
 
   # Create Algorithm and Model objects
-  alg_module_name = algorithm_path_.split('/')[-1][:-3]
-  model_module_name = model_path_.split('/')[-1][:-3]
-  genome_module_name = genome_path_.split('/')[-1][:-3]
-  alg_module_ = __import__(alg_module_name)
+  alg_module_name_ = algorithm_path_.split('/')[-1][:-3]
+  model_module_name_ = model_path_.split('/')[-1][:-3]
+  genome_module_name_ = genome_path_.split('/')[-1][:-3]
+  alg_module_ = __import__(alg_module_name_)
   algorithm_ = getattr(alg_module_, algorithm_name_)
-  model_module_ = __import__(model_module_name)
+  model_module_ = __import__(model_module_name_)
   model_ = getattr(model_module_, model_name_)
-  genome_module_ = __import__(genome_module_name)
+  genome_module_ = __import__(genome_module_name_)
   genome_ = getattr(genome_module_, genome_name_)
   genes_ = [getattr(__import__(gene_name_), gene_name_) for gene_name_ in gene_names_]
-  # all_args['algorithm'] = load_algorithm(all_args['run_name'])
-  # all_args['model'] = load_model(all_args['run_name'])
-  all_args['algorithm'] = None
+  all_args['algorithm'] = None      # Can't load until obtained file lock
   all_args['model'] = None
-  # all_args['genome'] = genome_
-  # all_args['genes'] = genes_
 
   # Run server protocol with bash kwargs
   try:

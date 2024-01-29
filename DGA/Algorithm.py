@@ -84,6 +84,8 @@ class Genetic_Algorithm_Base:
     # Load history
     if history:
       self.history = self.load_history()
+    else:
+      self.history = False
 
     # Initialize logging vars
     self.log_vars = ['timestamp', 'fitness', 'iteration']
@@ -161,7 +163,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
   # Fetch a new Parameters from pool for testing.
   # Inputs: None
   # Outputs: tuple of (params_name, success_flag)
-  def fetch_params(self) -> tuple:
+  def fetch_params(self, **kwargs) -> tuple:
     self.current_iter += 1  # Increment iteration
 
     # If pool is uninitialized, initialize new Parameters
@@ -238,7 +240,6 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
   # Outputs: Parameters (same object, mutated)
   def mutate(self, params: Parameters) -> Parameters:
     params = self.genome.mutate(params)
-    self.genome.decay_mutators()
     return params
 
   # End condition for run

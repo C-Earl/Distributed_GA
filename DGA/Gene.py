@@ -234,7 +234,3 @@ class Genome(dict):
       new_param = np.concatenate([p1[gene_name].flatten()[:splice], p2[gene_name].flatten()[splice:]])
       child_params[gene_name] = new_param.reshape(gshape)
     return child_params
-
-  # Decay mutation rate (unimplemented)
-  def decay_mutators(self):
-    pass
