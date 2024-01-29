@@ -1,5 +1,6 @@
 from DGA.Algorithm import Genetic_Algorithm, get_pool_key
 from DGA.Gene import Genome, Gene, Parameters
+from Hananel_Genome import Hananel_Genome
 from scipy.spatial import distance
 import numpy as np
 
@@ -7,16 +8,13 @@ import numpy as np
 class Hananel_Algorithm(Genetic_Algorithm):
   def __init__(self,
                # Genetic Algorithm Parameters
-               genome: Genome,  # Genome to use for creating new Parameters
+               genome: Hananel_Genome,  # Genome to use for creating new Parameters
                num_params: int,  # Number of Parameters in pool
 
                # Hananel Algorithm Parameters
-               # mutation_rate: float,  # Mutation rate
-               # crossover_rate: float,  # Crossover rate
+               mutation_rate: float,  # Mutation rate
                iterations_per_epoch: int,  # Number of iterations per epoch
                epochs: int,  # Number of epochs to run
-               mutation_decay: float = 1,  # Optional: Rate of decay for mutation rate
-               crossover_decay: float = 1,  # Optional: Rate of decay for crossover rate
                num_parents: int = 2,  # Number of parents to select for breeding
                diversity_threshold: float = 0.1,  # Threshold for diversity
                diversity_method: str = 'euclidean',  # Optional: Method for calculating diversity
@@ -33,6 +31,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.diversity_threshold = diversity_threshold
     self.diversity_method = diversity_method
     self.cross_points = cross_points
+    self.mutation_rate = mutation_rate
     self.iterations_per_epoch = iterations_per_epoch
     self.epochs = epochs
     self.current_epoch = 0
@@ -42,8 +41,9 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.plateau_sensitivity = plateau_sensitivity
     self.plateau_warmup = plateau_warmup
     self.founders_pool = {}  # Pool of top scoring Parameters from previous epochs
+
+    self.diversity_history = []  # History of diversity scores
     self.diversity_matrix = np.zeros((self.num_params, self.num_params))  # Distance between all params
-    self.fitness_history = np.zeros((self.num_params, plateau_range))     # Record of past fitness (per agent)
     self.agent_iterations = np.zeros(self.num_params, dtype=int)          # Iterations per agent (per epoch)
 
   # Fetch a new Parameters from pool for testing.
@@ -59,6 +59,8 @@ class Hananel_Algorithm(Genetic_Algorithm):
     if not (len(self.pool.items()) < self.num_params):
       matrix_pool = np.vstack([params.as_array() for params in self.valid_parents.values()])
       self.diversity_matrix = distance.cdist(matrix_pool, matrix_pool, self.diversity_method)
+      diversity = self.diversity_matrix.sum() / (self.diversity_matrix.size - self.diversity_matrix.shape[0])
+      self.diversity_history.append(diversity)
 
     # Filter out prior epoch Parameters
     # Param already written to file & logged, so remove from pool & generate new init param
@@ -66,7 +68,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
       if param.epoch < self.current_epoch:
         del self.pool[param_key]
         new_params = self.spawn(self.total_iter)
-        params_name = get_pool_key(new_params)
+        params_name = hash(new_params)
         new_params.set_attribute('agent_id', agent_id)
         new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
         new_params.set_attribute('epoch', self.current_epoch)
@@ -77,7 +79,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     # If pool is uninitialized, initialize new Parameters
     if len(self.pool.items()) < self.num_params:
       new_params = self.spawn(self.total_iter)
-      params_name = get_pool_key(new_params)
+      params_name = hash(new_params)
       new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
       new_params.set_attribute('epoch', self.current_epoch)
@@ -94,7 +96,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     elif self.epoch_iter >= self.iterations_per_epoch or self.agent_converged(agent_id):
       self.start_new_epoch()
       new_params = self.spawn(self.total_iter)
-      params_name = get_pool_key(new_params)
+      params_name = hash(new_params)
       new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
       new_params.set_attribute('epoch', self.current_epoch)
@@ -104,13 +106,13 @@ class Hananel_Algorithm(Genetic_Algorithm):
     # Otherwise, breed new offspring
     else:
       new_params = self.breed(self.total_iter)
-      params_name = get_pool_key(new_params)
+      params_name = hash(new_params)
       new_params.set_attribute('agent_id', agent_id)
       new_params.set_attribute('proximity_penalty', self.founder_proximity_penalty(new_params))
       new_params.set_attribute('epoch', self.current_epoch)
       while params_name in self.pool.keys():  # Keep attempting until unique
         new_params = self.breed(self.total_iter)
-        params_name = get_pool_key(new_params)
+        params_name = hash(new_params)
 
       # Remove worst Parameters from the pool
       self.trim_pool()
@@ -147,9 +149,17 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Inputs: current iteration
   # Outputs: new Parameters (new offspring)
   def breed(self, iteration: int) -> Parameters:
+    # Create new offspring
     parents = self.select_parents()
     offspring = self.crossover(parents, iteration)
-    offspring = self.mutate(offspring)
+
+    # Apply mutation with 'mutation rate'% chance
+    if np.random.rand() < self.mutation_rate:
+      offspring = self.mutate(offspring)
+
+    ### IMPLEMENT ME ###
+    # Apply merge_mutate, multipoint_mutate, etc. here
+
     return offspring
 
   # Removes Parameters with lowest fitness from pool
@@ -164,8 +174,6 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Inputs: None
   # Outputs: list of Parameters (self.num_parents long)
   def select_parents(self) -> list[Parameters]:
-    # TODO: Change according to age of Parameter (iteration)
-
     # Get (normalized) fitness scores
     params_list = list(self.valid_parents.values())
     fitness_scores = [params.fitness + params.proximity_penalty for params in params_list]
@@ -176,8 +184,8 @@ class Hananel_Algorithm(Genetic_Algorithm):
         self.diversity_matrix.max() - self.diversity_matrix.min())  # Normalize to [0, 1]
     param_diversities = np.array([param_div.mean() for param_div in normalized_dmat])
 
-    # (Apply age penalty here)
-
+    ### IMPLEMENT ME ###
+    # Apply age penalty here
 
     # Calculate probabilities
     probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
@@ -201,7 +209,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return False
 
     # Check for plateaus
-    agent_history = self.history[agent_id][-num_tested:]
+    agent_history = self.history[agent_id][-self.plateau_range:]
     fitness_history = np.array([log['fitness'] for log in agent_history])
     coefs = np.polyfit(np.arange(len(fitness_history)), fitness_history, 1)
     if coefs[0] < self.plateau_sensitivity:
@@ -220,3 +228,4 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return np.array([i + abs(min_v) for i in values])
     else:
       return values
+
