@@ -37,6 +37,7 @@ class Server_SLURM(Server):
                               gene_names=self.gene_names,
                               num_parallel_processes=self.num_parallel_processes,
                               data_path=self.data_path,
+                              sbatch_script=self.sbatch_script,   # Needed for SLURM
                               log_pool=self.log_pool,
                               **kwargs)
 
@@ -45,7 +46,7 @@ class Server_SLURM(Server):
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
       cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
-      self.server_callback(**kwargs)
+      self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
 
 
 # Main function catches server-callbacks & runs models

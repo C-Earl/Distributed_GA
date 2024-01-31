@@ -225,8 +225,16 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     fitness_scores = [params.fitness for params in params_list]
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
     probabilities = normed_fitness / np.sum(normed_fitness)  # Normalize to [0, 1]
+
+    max_ind = np.argmax(probabilities)
+    for i, p in enumerate(probabilities):
+      if p == 0:
+        probabilities[i] += 1e-5
+        probabilities[max_ind] -= 1e-5
+
     parent_inds = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities,
-                                   size=self.num_parents)
+                                    size=self.num_parents)
+                                   
     return [params_list[i] for i in parent_inds]
 
   # Crossover parents to create offspring (according to user provided Genome)

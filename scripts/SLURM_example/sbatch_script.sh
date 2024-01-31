@@ -22,7 +22,7 @@ trap 'echo signal recieved!; kill "${PID}"; wait "${PID}"; handler' USR1 SIGINT 
 echo "Job started!"
 
 # run python script
-python3 $3 --model_id $1 --run_name $2
+python3 $3 --agent_id $1 --run_name $2
 
 
 echo "Job ended!"

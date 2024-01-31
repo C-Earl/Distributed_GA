@@ -15,10 +15,10 @@ if __name__ == '__main__':
   genome.add_gene(gene, 'vector_gene')
 
   mod = Testing_Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
-  alg = Genetic_Algorithm(genome=genome, num_params=10, iterations=1_000)
-  # parallel_runner = Server(run_name="SLURM_run", algorithm=alg, model=mod, num_parallel_processes=4)
-  sync_runner = Synchronized(run_name="SLURM_run", algorithm=alg, model=mod)
-  sync_runner.run()
+  alg = Genetic_Algorithm(genome=genome, num_params=50, iterations=1_000)
+  parallel_runner = Server_SLURM(run_name="SLURM_run", algorithm=alg, model=mod, num_parallel_processes=50, sbatch_script='sbatch_script.sh')
+  # sync_runner = Synchronized(run_name="SLURM_run", algorithm=alg, model=mod)
+  # sync_runner.run()
 
-  from DGA.Plotting import plot_model_logs
-  plot_model_logs(run_dir="SLURM_run", num_models=1)
+  # from DGA.Plotting import plot_model_logs
+  # plot_model_logs(run_dir="SLURM_run", num_models=1)

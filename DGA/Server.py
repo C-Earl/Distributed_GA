@@ -167,7 +167,7 @@ class Server:
     # Lock pool files during params creation to prevent race condition
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
     while True:
-      with portalocker.Lock(pool_lock_path, timeout=100) as _:
+      with portalocker.Lock(pool_lock_path, timeout=500) as _:
 
         # Setup algorithm by loading from file
         # - updates pool and history based on files which other agents may have changed
@@ -201,7 +201,7 @@ class Server:
 
           break
         else:
-          time.sleep(1)
+          time.sleep(np.random.rand())
 
     # Remove old params_name from args, and send new params to model
     kwargs.pop('params_name')
