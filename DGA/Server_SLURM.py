@@ -3,6 +3,7 @@ from os.path import join as file_path
 from os import system as cmd
 import sys
 import argparse
+from portalocker.exceptions import LockException
 from DGA.File_IO import write_model_args_to_file, load_model_args_from_file, write_error_log
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
@@ -11,9 +12,10 @@ from DGA.Server import Server
 
 class Server_SLURM(Server):
   def __init__(self, run_name: str, algorithm: Algorithm | type, model: Model | type,
-               num_parallel_processes: int, sbatch_script: str, call_type: str = 'init',
+               num_parallel_processes: int, sbatch_script: str, callback_sbatch_script: str = None, call_type: str = 'init',
                data_path: str = None, log_pool: int = -1, **kwargs):
     self.sbatch_script = sbatch_script
+    self.callback_sbatch_script = callback_sbatch_script
     super().__init__(run_name, algorithm, model, num_parallel_processes, call_type, data_path, log_pool, **kwargs)
 
   # Save args for model, and make sbatch calls
@@ -46,8 +48,18 @@ class Server_SLURM(Server):
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
       cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
-      self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
+      try:
+        self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
+      except LockException:
+        server_path_ = os.path.abspath(__file__)
+        cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
 
+    # elif call_type == 'server_callback':
+    #   # Check if need to call new node for callback. If not, run callback on current node
+    #   if self.callback_sbatch_script is not None:
+    #     cmd(f"sbatch {self.callback_sbatch_script} {agent_id} {self.run_name} {server_path_}")
+    #   else:
+    #     self.server_callback(**kwargs, agent_id=agent_id)
 
 # Main function catches server-callbacks & runs models
 if __name__ == '__main__':

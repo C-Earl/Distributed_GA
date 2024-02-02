@@ -139,6 +139,14 @@ class Parameters(dict):
   def as_array(self) -> np.ndarray:
     return np.concatenate([param.flatten() for param in self.values()])
 
+  def from_array(self, array: np.ndarray):
+    index = 0
+    for gene_name, gene in self.items():
+      gshape = gene.shape
+      gsize = np.prod(gshape)
+      self[gene_name] = array[index:index+gsize].reshape(gshape)
+      index += gsize
+
   def set_fitness(self, fitness: float):
     self.fitness = fitness
     self.tested_ = True
@@ -234,3 +242,12 @@ class Genome(dict):
       new_param = np.concatenate([p1[gene_name].flatten()[:splice], p2[gene_name].flatten()[splice:]])
       child_params[gene_name] = new_param.reshape(gshape)
     return child_params
+
+
+if __name__ == '__main__':
+  test = Parameters(0, {'a': np.array([1, 2, 3]), 'b': np.array([4, 5, 6])})
+  arr = test.as_array()
+  print(arr)
+  arr = np.zeros_like(arr)
+  test.from_array(arr)
+  print(test)
