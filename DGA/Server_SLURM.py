@@ -48,11 +48,8 @@ class Server_SLURM(Server):
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
       cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
-      try:
-        self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
-      except LockException:
-        server_path_ = os.path.abspath(__file__)
-        cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
+      self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
+
 
     # elif call_type == 'server_callback':
     #   # Check if need to call new node for callback. If not, run callback on current node
