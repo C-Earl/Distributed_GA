@@ -5,7 +5,8 @@ import hashlib
 import numpy as np
 from abc import abstractmethod
 from typing import Union
-from DGA.File_IO import load_params_file as load_param_file, load_history, load_params_file_async, load_history_async
+from DGA.File_IO import load_params_file as load_param_file, load_history, load_params_file_async, load_history_async, \
+  load_params_file
 from DGA.Pool import Pool, Subset_Pool
 from DGA.Gene import Gene, Genome, Parameters
 
@@ -78,12 +79,12 @@ class Genetic_Algorithm_Base:
     self.valid_parents = Subset_Pool(condition=self.tested_condition)
     self.pool.add_subset_pool(self.valid_parents)
 
-    # Load pool
-    self.pool.extend(self.load_pool())
+    # # Load pool
+    # self.pool.extend(self.load_pool())
 
     # Load history
     if history:
-      self.history = self.load_history()
+      self.history = {}
     else:
       self.history = None
 
@@ -94,19 +95,26 @@ class Genetic_Algorithm_Base:
   def tested_condition(self, key, params):
     return params.tested()
 
-  def load_pool(self):
+  def load_pool(self, async_: bool):
+    if async_:
+      param_loader = load_params_file_async
+    else:
+      param_loader = load_params_file
     pool = {}
     for root, dirs, files in os.walk(self.pool_path):
       for file in files:
         file_name = file.split('.')[0]  # This will be unique hash of the param
-        params = load_params_file_async(self.run_name, file_name)
+        params = param_loader(self.run_name, file_name)
         if params is None:    # File no longer available
           continue
         pool[file_name] = params
     return pool
 
-  def load_history(self):
-    return load_history_async(self.run_name)
+  def load_history(self, async_: bool):
+    if async_:
+      return load_history_async(self.run_name)
+    else:
+      return load_history(self.run_name)
 
   @abstractmethod
   def fetch_params(self, **kwargs) -> tuple:
