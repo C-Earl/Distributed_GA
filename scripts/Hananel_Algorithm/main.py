@@ -1,5 +1,5 @@
 from Hananel_Algorithm import Hananel_Algorithm as Algorithm
-from DGA.Server import Server
+from DGA.Server_async import Server
 from DGA.Local import Synchronized
 from DGA.Model import Testing_Model as Model
 from DGA.Gene import Gene
@@ -18,8 +18,8 @@ if __name__ == '__main__':
   genome.add_gene(gene, 'vector_gene')
 
   mod = Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
-  alg = Algorithm(genome=genome, num_params=10, iterations_per_epoch=1_000, epochs=5, plateau_warmup=100, mutation_rate=0.9)
-  # parallel_runner = Server(run_name="Hananel_Alg", algorithm=alg, model=mod, num_parallel_processes=4)
+  alg = Algorithm(genome=genome, num_params=10, iterations_per_epoch=1_000, epochs=2, plateau_warmup=100, mutation_rate=0.9)
+  # parallel_runner = Server(run_name="Hananel_Alg", algorithm=alg, model=mod, num_parallel_processes=10)
   sync_runner = Synchronized(run_name="Hananel_Alg", algorithm=alg, model=mod)
   sync_runner.run()
 

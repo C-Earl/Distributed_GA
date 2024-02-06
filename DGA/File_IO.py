@@ -1,4 +1,6 @@
+import datetime
 import os
+import time
 from os.path import join as file_path
 from DGA.Gene import Gene, Genome, Parameters
 from DGA.Model import Model
@@ -13,6 +15,7 @@ import ast
 # Constants for filesystem
 POOL_DIR = "pool"
 LOG_DIR = "logs"
+ALG_DIR = "algorithm_buffer"
 RUN_INFO = "run_info"
 POOL_LOG_NAME = "POOL_LOG.log"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
@@ -82,12 +85,35 @@ def load_params_file(run_name: str, params_name: str):
   return params
 
 
+def load_params_file_async(run_name: str, params_name: str):
+  while True:
+    try:
+      return load_params_file(run_name, params_name)
+    except EOFError:
+      time.sleep(np.random.rand() * 0.1)
+      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+        log_file.write(f"EOFError loading params {params_name}\n")
+    except pickle.UnpicklingError:
+      time.sleep(np.random.rand() * 0.1)
+      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+        log_file.write(f"Error unpickling params file {params_name}\n")
+    except FileNotFoundError:
+      return None
+
+
 # Delete params file
 def delete_params_file(run_name: str, params_name: str):
   pool_path = file_path(run_name, POOL_DIR)
   params_path = file_path(pool_path, params_name) + ".pkl"
   os.remove(params_path)
   return True
+
+
+def delete_params_file_async(run_name: str, params_name: str):
+  try:
+    delete_params_file(run_name, params_name)
+  except FileNotFoundError:
+    return False
 
 
 # # Read status of run to file (only read pickle file)
@@ -141,6 +167,16 @@ def load_history(run_name: str):
   return history
 
 
+def load_history_async(run_name: str):
+  while True:
+    try:
+      return load_history(run_name)
+    except EOFError:
+      time.sleep(np.random.rand() * 0.1)
+      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+        log_file.write(f"EOFError loading history\n")
+
+
 def write_pool_log(run_name: str, pool_log: dict):
   pool_log_copy = jsonify(copy.deepcopy(pool_log))
   log_path = file_path(run_name, LOG_DIR, POOL_LOG_NAME)
@@ -169,13 +205,60 @@ def load_model(run_name: str):
 
 
 def save_algorithm(run_name: str, algorithm):
-  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
+  alg_path = file_path(run_name, RUN_INFO, ALG_DIR, save_name)
   with open(alg_path, 'wb') as alg_file:
     pickle.dump(algorithm, alg_file)
 
 
 def load_algorithm(run_name: str):
-  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
-  with open(alg_path, 'rb') as alg_file:
-    model = pickle.load(alg_file)
-  return model
+  while True:
+    alg_saves = os.listdir(file_path(run_name, RUN_INFO, ALG_DIR))
+    alg_saves.sort()
+    alg_path = file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[-1])
+    try:
+      with open(alg_path, 'rb') as alg_file:
+        alg = pickle.load(alg_file)
+        break
+
+    # File is being written to, wait a bit and try again
+    except EOFError as e:
+      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+        log_file.write(f"EOF error with algorithm: {e}\n")
+      time.sleep(np.random.rand() * 0.1)
+
+    # File not found, wait a bit and try again
+    except FileNotFoundError as e:
+      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+        log_file.write(f"File Not Found error with algorithm: {e}\n")
+      time.sleep(np.random.rand() * 0.1)
+
+    # Corrupt file detected, remove it & try to load again
+    except Exception as e:
+      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+        log_file.write(f"Error loading algorithm: {e}\n")
+      try:
+        os.remove(alg_path)
+      except FileNotFoundError:
+        pass
+
+  if len(alg_saves) > 10:
+    num_remove = len(alg_saves) - 10
+    for i in range(num_remove):
+      try:
+        os.remove(file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[i]))
+      except FileNotFoundError:
+        pass
+  return alg
+
+
+def load_algorithm_async(run_name: str):
+  # while True:
+  #   try:
+  return load_algorithm(run_name)
+    # except EOFError:
+    #   time.sleep(np.random.rand() * 0.1)
+    # except pickle.UnpicklingError as e:
+    #   time.sleep(np.random.rand() * 0.1)
+    #   with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+    #     log_file.write(f"Unpickling error with algorithm: {e}\n")

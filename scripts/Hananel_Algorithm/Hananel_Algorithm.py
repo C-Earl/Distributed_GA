@@ -12,7 +12,6 @@ class Hananel_Algorithm(Genetic_Algorithm):
                num_params: int,  # Number of Parameters in pool
 
                # Hananel Algorithm Parameters
-               mutation_rate: float,  # Mutation rate
                iterations_per_epoch: int,  # Number of iterations per epoch
                epochs: int,  # Number of epochs to run
                num_parents: int = 2,  # Number of parents to select for breeding
@@ -31,7 +30,6 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.diversity_threshold = diversity_threshold
     self.diversity_method = diversity_method
     self.cross_points = cross_points
-    self.mutation_rate = mutation_rate
     self.iterations_per_epoch = iterations_per_epoch
     self.epochs = epochs
     self.current_epoch = 0
@@ -45,6 +43,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.diversity_history = []  # History of diversity scores
     self.diversity_matrix = np.zeros((self.num_params, self.num_params))  # Distance between all params
     self.agent_iterations = np.zeros(self.num_params, dtype=int)          # Iterations per agent (per epoch)
+    self.mutation_rate = 0.1    # Dynamically adjusted mutation rate
 
   # Fetch a new Parameters from pool for testing.
   # Inputs: None
@@ -62,6 +61,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
       # Why "- self.diversity_matrix.shape[0]" ?
       diversity = self.diversity_matrix.sum() / (self.diversity_matrix.size - self.diversity_matrix.shape[0])
       self.diversity_history.append(diversity)
+      self.mutation_rate = 0.9
 
     # Filter out prior epoch Parameters
     # Param already written to file & logged, so remove from pool & generate new init param
@@ -168,9 +168,14 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Inputs: None
   # Outputs: None
   def trim_pool(self) -> None:
-    sorted_params = self.sort_params(self.valid_parents)
-    worst_params_name = sorted_params[-1][0]
-    del self.pool[worst_params_name]  # Remove from pool
+    if len(self.valid_parents) > self.num_params:
+      num_to_remove = len(self.valid_parents) - self.num_params
+      sorted_params = self.sort_params(self.valid_parents)
+      for i in range(num_to_remove):
+        param_name = sorted_params[-(i+1)][0]
+        del self.pool[param_name]
+    # worst_params_name = sorted_params[-1][0]
+    # del self.pool[worst_params_name]  # Remove from pool
 
   # Select parents (for breeding) from pool based on fitness
   # Inputs: None
@@ -194,6 +199,11 @@ class Hananel_Algorithm(Genetic_Algorithm):
     # Calculate probabilities
     probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
     probabilities /= np.sum(normed_fitness + param_diversities)
+    max_ind = np.argmax(probabilities)
+    for i, p in enumerate(probabilities):
+      if p == 0:
+        probabilities[i] += 1e-5
+        probabilities[max_ind] -= 1e-5
     parent_inds = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities,
                                    size=self.num_parents)
     return [params_list[i] for i in parent_inds]
@@ -212,7 +222,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     if num_tested < self.plateau_warmup:
       return False
 
-    # Check for plateaus
+    # Check for fitness plateaus
     agent_history = self.history[agent_id][-self.plateau_range:]
     fitness_history = np.array([log['fitness'] for log in agent_history])
     coefs = np.polyfit(np.arange(len(fitness_history)), fitness_history, 1)
