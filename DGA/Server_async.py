@@ -10,7 +10,7 @@ import time
 from DGA.File_IO import write_params_file, load_params_file, POOL_DIR, LOG_DIR, RUN_INFO, POOL_LOCK_NAME, write_log, \
   write_model_args_to_file, load_model_args_from_file, \
   delete_params_file, write_error_log, save_model, load_model, save_algorithm, load_algorithm, load_params_file_async, \
-  load_algorithm_async, delete_params_file_async
+  load_algorithm_async, delete_params_file_async, save_algorithm_async
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
 
@@ -131,7 +131,7 @@ class Server:
     self.update_pool(original_pool, final_pool)
 
     # Save algorithm & model to files
-    save_algorithm(self.run_name, alg)
+    save_algorithm_async(self.run_name, alg)
     save_model(self.run_name, model)
 
     # Call models to run initial params
@@ -174,8 +174,8 @@ class Server:
     while True:
       alg = load_algorithm_async(self.run_name)
       if alg.history is not None:
-        alg.history.update(alg.load_history())
-      alg.pool.update(alg.load_pool())
+        alg.history.update(alg.load_history(async_=True))
+      alg.pool.update(alg.load_pool(async_=True))
       alg.pool.update_subpools()
 
       # Copy pool for later comparison when updating files
@@ -196,7 +196,7 @@ class Server:
         self.update_pool(orginal_pool, final_pool)
 
         # Update pool log & save alg to file
-        save_algorithm(self.run_name, alg)
+        save_algorithm_async(self.run_name, alg)
 
         break
       else:

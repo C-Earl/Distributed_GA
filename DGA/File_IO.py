@@ -85,18 +85,25 @@ def load_params_file(run_name: str, params_name: str):
   return params
 
 
+# Load params from file, handle for asynchronous errors
 def load_params_file_async(run_name: str, params_name: str):
   while True:
     try:
       return load_params_file(run_name, params_name)
+
+    # File is being written to by other agent, wait and try again
     except EOFError:
       time.sleep(np.random.rand() * 0.1)
       with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
         log_file.write(f"EOFError loading params {params_name}\n")
+
+    # File is being written to by other agent, wait and try again
     except pickle.UnpicklingError:
       time.sleep(np.random.rand() * 0.1)
       with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
         log_file.write(f"Error unpickling params file {params_name}\n")
+
+    # File removed by other agent, return None (no params)
     except FileNotFoundError:
       return None
 
@@ -109,44 +116,24 @@ def delete_params_file(run_name: str, params_name: str):
   return True
 
 
+# Delete params file, handle for asynchronous errors
 def delete_params_file_async(run_name: str, params_name: str):
   try:
     delete_params_file(run_name, params_name)
+
+  # File already deleted, return False
   except FileNotFoundError:
     return False
 
 
-# # Read status of run to file (only read pickle file)
-# def read_run_status(run_name: str):
-#   status_path = file_path(run_name, RUN_STATUS_NAME_PKL)
-#   with open(status_path, 'rb') as status_file:
-#     run_status = pickle.load(status_file)
-#   return run_status
-#
-#
-# # Write status of run to pickle file for loading, and json file for human readability
-# def write_run_status(run_name: str, status: dict):
-#   # Write to pkl
-#   status_path = file_path(run_name, RUN_STATUS_NAME_PKL)
-#   with open(status_path, 'wb') as status_file:
-#     pickle.dump(status, status_file)
-#
-#   # Write to json
-#   status_copy = jsonify(copy.deepcopy(status))
-#   status_path = file_path(run_name, RUN_STATUS_NAME_JSON)
-#   options = jsbeautifier.default_options()
-#   options.indent_size = 2
-#   with open(status_path, 'w') as status_file:
-#     status_file.write(jsbeautifier.beautify(json.dumps(status_copy), options))
-
-
-# Write to model log file
+# Write to log file
 def write_log(run_name: str, agent_id: int, log: dict | np.ndarray):
   log_path = file_path(run_name, LOG_DIR, f'{AGENT_NAME}_{str(agent_id)}' + ".log")
   with open(log_path, 'a+') as log_file:
     log_file.write(json.dumps(log) + "\n")    # Not json.dump because want each log on a new line
 
 
+# Read from log file
 def read_log(run_name: str, agent_id: int):
   log_path = file_path(run_name, LOG_DIR, f'{AGENT_NAME}_{str(agent_id)}' + ".log")
   with open(log_path, 'r') as log_file:
@@ -156,6 +143,7 @@ def read_log(run_name: str, agent_id: int):
   return logs
 
 
+# Load history from log files
 def load_history(run_name: str):
   history = {}
   log_folder = file_path(run_name, LOG_DIR)
@@ -167,10 +155,13 @@ def load_history(run_name: str):
   return history
 
 
+# Load history from log files, handle for asynchronous errors
 def load_history_async(run_name: str):
   while True:
     try:
       return load_history(run_name)
+
+    # Log is being written to by other agent, wait and try again
     except EOFError:
       time.sleep(np.random.rand() * 0.1)
       with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
@@ -204,14 +195,31 @@ def load_model(run_name: str):
   return model
 
 
+# Save single algorithm file for synchronized runs
 def save_algorithm(run_name: str, algorithm):
+  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  with open(alg_path, 'wb') as alg_file:
+    pickle.dump(algorithm, alg_file)
+
+
+# Save buffer of algorithm files for asynchronous runs
+def save_algorithm_async(run_name: str, algorithm):
   save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
   alg_path = file_path(run_name, RUN_INFO, ALG_DIR, save_name)
   with open(alg_path, 'wb') as alg_file:
     pickle.dump(algorithm, alg_file)
 
 
+# Load algorithm file for synchronized runs (only 1 file)
 def load_algorithm(run_name: str):
+  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  with open(alg_path, 'rb') as alg_file:
+    model = pickle.load(alg_file)
+  return model
+
+
+# Load algorithm file for asynchronous runs (select most recent from buffer)
+def load_algorithm_async(run_name: str):
   while True:
     alg_saves = os.listdir(file_path(run_name, RUN_INFO, ALG_DIR))
     alg_saves.sort()
@@ -250,15 +258,3 @@ def load_algorithm(run_name: str):
       except FileNotFoundError:
         pass
   return alg
-
-
-def load_algorithm_async(run_name: str):
-  # while True:
-  #   try:
-  return load_algorithm(run_name)
-    # except EOFError:
-    #   time.sleep(np.random.rand() * 0.1)
-    # except pickle.UnpicklingError as e:
-    #   time.sleep(np.random.rand() * 0.1)
-    #   with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-    #     log_file.write(f"Unpickling error with algorithm: {e}\n")
