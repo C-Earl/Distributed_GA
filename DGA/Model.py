@@ -103,6 +103,7 @@ class Testing_Model(Model):
       diff = np.linalg.norm(param.flatten() - targ.flatten())
       if diff < smallest_diff:
         smallest_diff = diff
+    time.sleep(np.random.rand())
     return -smallest_diff
 
   def args_to_json(self) -> dict:

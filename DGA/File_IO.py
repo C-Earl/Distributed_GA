@@ -106,6 +106,10 @@ def load_params_file_async(run_name: str, params_name: str):
     # File removed by other agent, return None (no params)
     except FileNotFoundError:
       return None
+    
+    # File removed in NFS, return None (no params)
+    except OSError:
+      return None
 
 
 # Delete params file
@@ -204,8 +208,9 @@ def save_algorithm(run_name: str, algorithm):
 
 # Save buffer of algorithm files for asynchronous runs
 def save_algorithm_async(run_name: str, algorithm):
-  save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
-  alg_path = file_path(run_name, RUN_INFO, ALG_DIR, save_name)
+  save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
+  random_string = ''.join([str(np.random.randint(0, 9)) for _ in range(100)])
+  alg_path = file_path(run_name, RUN_INFO, ALG_DIR, f"{save_name}_{random_string}")
   with open(alg_path, 'wb') as alg_file:
     pickle.dump(algorithm, alg_file)
 
@@ -222,7 +227,7 @@ def load_algorithm(run_name: str):
 def load_algorithm_async(run_name: str):
   while True:
     alg_saves = os.listdir(file_path(run_name, RUN_INFO, ALG_DIR))
-    alg_saves.sort()
+    alg_saves.sort(key=lambda x: x.split('_')[0])
     alg_path = file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[-1])
     try:
       with open(alg_path, 'rb') as alg_file:
@@ -250,11 +255,15 @@ def load_algorithm_async(run_name: str):
       except FileNotFoundError:
         pass
 
-  if len(alg_saves) > 10:
-    num_remove = len(alg_saves) - 10
+  if len(alg_saves) > 51:
+    num_remove = len(alg_saves) - 51
     for i in range(num_remove):
       try:
         os.remove(file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[i]))
+      # File already removed, pass
       except FileNotFoundError:
         pass
+      except OSError:
+        pass
+
   return alg

@@ -222,10 +222,12 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
   # Inputs: None
   # Outputs: None
   def trim_pool(self) -> None:
-    sorted_parents = sorted(self.valid_parents.items(),  # Only use tested genes
-                            key=lambda params_kv: params_kv[1].fitness, reverse=True)  # Sort by fitness
-    worst_params_name = sorted_parents[-1][0]
-    del self.pool[worst_params_name]  # Remove from pool
+    if len(self.valid_parents) > self.num_params:
+      num_to_remove = len(self.valid_parents) - self.num_params
+      sorted_params = self.sort_params(self.valid_parents)
+      for i in range(num_to_remove):
+        param_name = sorted_params[-(i+1)][0]
+        del self.pool[param_name]
 
   # Select parents (for breeding) from pool based on fitness
   # Inputs: None
@@ -275,6 +277,10 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     else:
       return values
 
+  # Takes a dictionary of Parameters, returns a list of tuples containing the key of the Parameter and the Parameter
+  def sort_params(self, params_list: dict[str, Parameters]) -> list[tuple[str, Parameters]]:
+    sorted_params = sorted(params_list.items(), key=lambda x: x[1].fitness, reverse=True)
+    return sorted_params
 
 # class Plateau_Genetic_Algorithm(Genetic_Algorithm):
 #
