@@ -155,14 +155,16 @@ class Hananel_Algorithm(Genetic_Algorithm):
     if np.random.rand() < self.mutation_rate:
       offspring = self.genome.mutate(offspring)
 
-    offspring_array = offspring.as_array()
+    # offspring_array = offspring.as_array()
 
     ### IMPLEMENT ME ###
     # Apply merge_mutate, multipoint_mutate, etc. here
     # Access genome functions with: self.genome.<function_name>(<args>)
     # Example: self.genome.merge_mutate(offspring)
 
-    return offspring.from_array(offspring_array)
+    # offspring.from_array(offspring_array)
+      
+    return offspring
 
   # Removes Parameters with lowest fitness from pool
   # Inputs: None
