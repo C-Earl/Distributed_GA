@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 from os.path import join as file_path
 import os

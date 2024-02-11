@@ -3,6 +3,8 @@ import time
 import numpy as np
 from abc import abstractmethod
 
+from typing import List
+
 
 ### Initializers ###
 class base_init_class:
@@ -95,17 +97,17 @@ class splice_mutation(base_mutate_class):
 
 ### Crossover Functions ###
 class base_crossover_class:
-  def run(self, parents: list[np.ndarray]) -> np.ndarray:
+  def run(self, parents: List[np.ndarray]) -> np.ndarray:
     pass
 
 
 class mean_crossover(base_crossover_class):
-  def run(self, parents: list[np.ndarray]) -> np.ndarray:
+  def run(self, parents: List[np.ndarray]) -> np.ndarray:
     return np.mean(parents, axis=0)
 
 
 class splice_crossover(base_crossover_class):
-  def run(self, parents: list[np.ndarray]) -> np.ndarray:
+  def run(self, parents: List[np.ndarray]) -> np.ndarray:
     p1, p2 = parents[0], parents[1]
     full_index = np.prod(p1.shape)
     splice = np.random.randint(low=0, high=full_index)
@@ -232,7 +234,7 @@ class Genome(dict):
   # Takes in a Parameters object and crosses it with another Parameters object
   # Inputs: list of Parameters (parents)
   # Outputs: Parameters (offspring)
-  def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
+  def crossover(self, parents: List[Parameters], iteration: int) -> Parameters:
     p1, p2 = parents[0], parents[1]  # Only two parents used for now, change later
     child_params = Parameters(iteration=iteration)
     for gene_name, gene in self.items():

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from matplotlib import pyplot as plt
 from os.path import join as file_path
 from DGA.File_IO import read_log

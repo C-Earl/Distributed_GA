@@ -1,3 +1,5 @@
+from typing import List, Dict, Tuple
+
 from DGA.Algorithm import Genetic_Algorithm, get_pool_key
 from DGA.Gene import Genome, Gene, Parameters
 from Hananel_Genome import Hananel_Genome
@@ -182,7 +184,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Select parents (for breeding) from pool based on fitness
   # Inputs: None
   # Outputs: list of Parameters (self.num_parents long)
-  def select_parents(self) -> list[Parameters]:
+  def select_parents(self) -> List[Parameters]:
     # Get (normalized) fitness scores
     params_list = list(self.valid_parents.values())
     fitness_scores = [params.fitness + params.proximity_penalty for params in params_list]
@@ -234,7 +236,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
       return False    # Otherwise, return False
 
   # Takes a dictionary of Parameters, returns a list of tuples containing the key of the Parameter and the Parameter
-  def sort_params(self, params_list: dict[str, Parameters]) -> list[tuple[str, Parameters]]:
+  def sort_params(self, params_list: Dict[str, Parameters]) -> List[Tuple[str, Parameters]]:
     sorted_params = sorted(params_list.items(), key=lambda x: x[1].fitness + x[1].proximity_penalty, reverse=True)
     return sorted_params
 

@@ -1,3 +1,5 @@
+from typing import List
+
 from DGA.Gene import Gene, Genome, Parameters
 import numpy as np
 
@@ -23,7 +25,7 @@ class Hananel_Genome(Genome):
   # Takes in a Parameters object and crosses it with another Parameters object
   # Inputs: list of Parameters (parents)
   # Outputs: Parameters (offspring)
-  def crossover(self, parents: list[Parameters], iteration: int) -> Parameters:
+  def crossover(self, parents: List[Parameters], iteration: int) -> Parameters:
     return super().crossover(parents, iteration)
 
   ###  IMPLEMENT ME  ###
