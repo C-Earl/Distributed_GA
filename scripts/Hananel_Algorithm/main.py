@@ -1,5 +1,5 @@
 from Hananel_Algorithm import Hananel_Algorithm as Algorithm
-from DGA.Server_async import Server
+from DGA.Server import Server
 from DGA.Local import Synchronized
 from DGA.Model import Testing_Model as Model
 from DGA.Gene import Gene

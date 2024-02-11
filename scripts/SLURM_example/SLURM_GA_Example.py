@@ -3,7 +3,6 @@ from DGA.Model import Testing_Model
 from DGA.Gene import Gene, Genome, Parameters
 from DGA.Local import Synchronized
 from DGA.Server_SLURM import Server_SLURM
-from DGA.Server import Server
 
 if __name__ == '__main__':
   # Run variables

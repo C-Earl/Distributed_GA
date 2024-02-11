@@ -8,8 +8,9 @@ import sys
 import argparse
 import time
 from DGA.File_IO import write_params_file, load_params_file, POOL_DIR, LOG_DIR, RUN_INFO, POOL_LOCK_NAME, write_log, \
-  write_model_args_to_file, load_model_args_from_file, write_pool_log, \
-  delete_params_file, write_error_log, save_model, load_model, save_algorithm, load_algorithm
+  write_model_args_to_file, load_model_args_from_file, \
+  delete_params_file, write_error_log, save_model, load_model, save_algorithm, load_algorithm, load_params_file_async, \
+  load_algorithm_async, delete_params_file_async, save_algorithm_async
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
 
@@ -116,6 +117,7 @@ class Server:
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, RUN_INFO), exist_ok=True)
+    os.makedirs(file_path(self.run_name, RUN_INFO, "algorithm_buffer"), exist_ok=True)
 
     # Generate initial params
     alg = algorithm_type(run_name=self.run_name, **algorithm_args)
@@ -129,7 +131,7 @@ class Server:
     self.update_pool(original_pool, final_pool)
 
     # Save algorithm & model to files
-    save_algorithm(self.run_name, alg)
+    save_algorithm_async(self.run_name, alg)
     save_model(self.run_name, model)
 
     # Call models to run initial params
@@ -139,13 +141,13 @@ class Server:
   def run_model(self, **kwargs):
     # Setup model
     params_name = kwargs['params_name']
-    params = load_params_file(self.run_name, params_name)      # All params info (inc. fitness, etc.)
+    params = load_params_file_async(self.run_name, params_name)      # All params info (inc. fitness, etc.)
     model = load_model(self.run_name) 
 
     # Load data using file locks (presumably training data)
     data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-    with portalocker.Lock(data_lock_path, timeout=100) as _:
-      model.load_data()
+    # with portalocker.Lock(data_lock_path, timeout=100) as _:
+    model.load_data()
 
     # Test params
     runtime_args = params['runtime_args'] if 'runtime_args' in params else {}
@@ -155,9 +157,9 @@ class Server:
     params.set_fitness(fitness)
     params.set_tested(True)
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-    with portalocker.Lock(pool_lock_path, timeout=10) as _:
-      write_params_file(self.run_name, params_name, params)
-      write_log(self.run_name, kwargs['agent_id'], model.logger(params))
+    # with portalocker.Lock(pool_lock_path, timeout=10) as _:
+    write_params_file(self.run_name, params_name, params)
+    write_log(self.run_name, kwargs['agent_id'], model.logger(params))
 
     # Callback server
     self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
@@ -166,42 +168,39 @@ class Server:
 
     # Lock pool files during params creation to prevent race condition
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
+
+    # Setup algorithm by loading from file
+    # - updates pool and history based on files which other agents may have changed
     while True:
-      with portalocker.Lock(pool_lock_path, timeout=500) as _:
+      alg = load_algorithm_async(self.run_name)
+      if alg.history is not None:
+        alg.history.update(alg.load_history(async_=True))
+      alg.pool.update(alg.load_pool(async_=True))
+      alg.pool.update_subpools()
 
-        # Setup algorithm by loading from file
-        # - updates pool and history based on files which other agents may have changed
-        alg = load_algorithm(self.run_name)
-        if alg.history is not None:
-          alg.history.update(alg.load_history())
-        alg.pool.update(alg.load_pool())
-        alg.pool.update_subpools()
+      # Copy pool for later comparison when updating files
+      orginal_pool = copy.deepcopy(alg.pool)
 
-        # Copy pool for later comparison when updating files
-        orginal_pool = copy.deepcopy(alg.pool)
+      # Check if run is complete
+      if alg.end_condition():
+        sys.exit()
 
-        # Check if run is complete
-        if alg.end_condition():
-          sys.exit()
+      # Generate next params for testing
+      params_name, success = alg.fetch_params(agent_id=kwargs['agent_id'])
 
-        # Generate next params for testing
-        params_name, success = alg.fetch_params(agent_id=kwargs['agent_id'])
+      # Update status & break if fetch was success, otherwise try again
+      if success:
 
-        # Update status & break if fetch was success, otherwise try again
-        if success:
+        # Update pool files (pool modified by alg)
+        final_pool = alg.pool
+        self.update_pool(orginal_pool, final_pool)
 
-          # Update pool files (pool modified by alg)
-          final_pool = alg.pool
-          self.update_pool(orginal_pool, final_pool)
+        # Update pool log & save alg to file
+        save_algorithm_async(self.run_name, alg)
 
-          # Update pool log & save alg to file
-          if self.log_pool != -1 and alg.current_iter % self.log_pool == 0:
-            write_pool_log(self.run_name, alg.pool)
-          save_algorithm(self.run_name, alg)
-
-          break
-        else:
-          time.sleep(np.random.rand())
+        break
+      else:
+        time.sleep(np.random.rand())
 
     # Remove old params_name from args, and send new params to model
     kwargs.pop('params_name')
@@ -217,7 +216,7 @@ class Server:
     # Injective check from original_pool to new_pool
     for params_name in original_pool.keys():
       if params_name not in new_pool.keys():          # If it's a removed params
-        delete_params_file(self.run_name, params_name)
+        delete_params_file_async(self.run_name, params_name)
 
   # Save important args to file and run next phase (callback or run_model)
   # Saves here are per-model, so that each model can run independently

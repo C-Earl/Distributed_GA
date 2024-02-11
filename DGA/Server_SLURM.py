@@ -9,7 +9,7 @@ from portalocker.exceptions import LockException
 from DGA.File_IO import write_model_args_to_file, load_model_args_from_file, write_error_log
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
-from DGA.Server_async import Server
+from DGA.Server import Server
 
 
 class Server_SLURM(Server):
