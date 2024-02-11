@@ -13,8 +13,8 @@ if __name__ == '__main__':
 
   mod = Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
   alg = Algorithm(num_params=10, iterations=1_000, genome=genome, num_parents=2)
-  sync_runner = Synchronized(run_name="vector_estimator_run_(sync)", algorithm=alg, model=mod)
+  sync_runner = Synchronized(run_name="Vect-Est (Sync)", algorithm=alg, model=mod)
   sync_runner.run()
 
   from DGA.Plotting import plot_model_logs
-  plot_model_logs(run_dir="vector_estimator_run_(sync)", num_models=1)
+  plot_model_logs(run_dir="Vect-Est (Sync)", num_models=1)
