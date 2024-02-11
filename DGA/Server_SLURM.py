@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os.path
 from os.path import join as file_path
 from os import system as cmd
