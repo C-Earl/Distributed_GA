@@ -11,12 +11,10 @@ DGA is designed to be highly generalizable, and can run theoretically train any 
 # Installation
 1. Clone repository
 2. Select a Python interpreter (3.10+ recommended)
-3. Build the package by running the following command in the terminal:
+3. Build and install the package by running the following command in the terminal:
 ```bash
- python3 setup.py sdist bdist_wheel
-```
-4. Install the package by running the following command in the terminal:
-```bash
+pip install setuptools wheel
+python3 setup.py sdist bdist_wheel
 pip install .
 ```
 
