@@ -15,7 +15,7 @@ DGA is designed to be highly generalizable, and can run theoretically train any 
 ```bash
 pip install setuptools wheel
 python3 setup.py sdist bdist_wheel
-pip install .
+pip install -e .
 ```
 
 # How to run example
