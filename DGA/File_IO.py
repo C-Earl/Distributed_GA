@@ -14,6 +14,7 @@ import numpy as np
 import copy
 import ast
 
+
 # Constants for filesystem
 POOL_DIR = "pool"
 LOG_DIR = "logs"
@@ -26,6 +27,7 @@ RUN_STATUS_NAME_JSON = "RUN_STATUS.json"
 RUN_STATUS_NAME_PKL = "RUN_STATUS.pkl"
 ERROR_LOG_NAME = "ERROR_LOG.log"
 AGENT_NAME = "AGENT"
+
 
 # Transform any non-json compatible types
 def jsonify(d: dict):
@@ -208,15 +210,6 @@ def save_algorithm(run_name: str, algorithm):
     pickle.dump(algorithm, alg_file)
 
 
-# Save buffer of algorithm files for asynchronous runs
-def save_algorithm_async(run_name: str, algorithm):
-  save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
-  random_string = ''.join([str(np.random.randint(0, 9)) for _ in range(100)])
-  alg_path = file_path(run_name, RUN_INFO, ALG_DIR, f"{save_name}_{random_string}")
-  with open(alg_path, 'wb') as alg_file:
-    pickle.dump(algorithm, alg_file)
-
-
 # Load algorithm file for synchronized runs (only 1 file)
 def load_algorithm(run_name: str):
   alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
@@ -225,14 +218,52 @@ def load_algorithm(run_name: str):
   return model
 
 
+def load_pool(run_name: str):
+  pool = {}
+  pool_path = file_path(run_name, POOL_DIR)
+  for root, dirs, files in os.walk(pool_path):
+    for file in files:
+      file_name = file.split('.')[0]  # This will be unique hash of the param
+      params = load_params_file(run_name, file_name)
+      if params is None:    # File no longer available
+        continue
+      pool[file_name] = params
+  return pool
+
+
+def load_pool_async(run_name: str):
+  pool = {}
+  pool_path = file_path(run_name, POOL_DIR)
+  for root, dirs, files in os.walk(pool_path):
+    for file in files:
+      file_name = file.split('.')[0]  # This will be unique hash of the param
+      params = load_params_file_async(run_name, file_name)
+      if params is None:    # File no longer available
+        continue
+      pool[file_name] = params
+  return pool
+
+
+# Save buffer of algorithm files for asynchronous runs
+#
+# Buffer is needed in case of corrupted files (due to asynchronous writing or DFS errors). If a file is corrupted,
+# the most recent file in the buffer is loaded instead. Buffer size specified in load_algorithm_async.
+def save_algorithm_async(run_name: str, algorithm):
+  save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
+  random_string = ''.join([str(np.random.randint(0, 9)) for _ in range(100)])
+  alg_path = file_path(run_name, RUN_INFO, ALG_DIR, f"{save_name}_{random_string}")  # Random string ensures unique name
+  with open(alg_path, 'wb') as alg_file:
+    pickle.dump(algorithm, alg_file)
+
+
 # Load algorithm file for asynchronous runs (select most recent from buffer)
-def load_algorithm_async(run_name: str):
-  while True:
+def load_algorithm_async(run_name: str, buffer_length: int, max_attempts: int = 1000):
+  for c in range(max_attempts):
     alg_saves = os.listdir(file_path(run_name, RUN_INFO, ALG_DIR))
     alg_saves.sort(key=lambda x: x.split('_')[0])
-    alg_path = file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[-1])
+    alg_path = file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[-1])    # Select most recent save...
     try:
-      with open(alg_path, 'rb') as alg_file:
+      with open(alg_path, 'rb') as alg_file:      # ...and try to load it
         alg = pickle.load(alg_file)
         break
 
@@ -248,7 +279,7 @@ def load_algorithm_async(run_name: str):
         log_file.write(f"File Not Found error with algorithm: {e}\n")
       time.sleep(np.random.rand() * 0.1)
 
-    # Corrupt file detected, remove it & try to load again
+    # Corrupt file detected, remove it & try to load again (should get next most recent file)
     except Exception as e:
       with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
         log_file.write(f"Error loading algorithm: {e}\n")
@@ -257,11 +288,19 @@ def load_algorithm_async(run_name: str):
       except FileNotFoundError:
         pass
 
-  if len(alg_saves) > 51:
-    num_remove = len(alg_saves) - 51
+  # Max attempts reached, shut down agent
+  if c == max_attempts - 1:
+    with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      log_file.write(f"Max load attempts, shutting down agent\n")
+    raise Exception("Max load attempts, shutting down agent")
+
+  # Trim buffer
+  if len(alg_saves) > buffer_length:
+    num_remove = len(alg_saves) - buffer_length
     for i in range(num_remove):
-      try:
+      try:    # Attempt to remove file
         os.remove(file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[i]))
+
       # File already removed, pass
       except FileNotFoundError:
         pass

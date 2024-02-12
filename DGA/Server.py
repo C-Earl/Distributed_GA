@@ -22,19 +22,6 @@ def list_public_attributes(input_var):
           not (k.startswith('_') or callable(v))]
 
 
-def dict_compare(d1, d2):
-  for k, v in d1.items():
-    if isinstance(v, dict):
-      dict_compare(v, d2[k])
-    elif isinstance(v, np.ndarray):
-      if not np.array_equal(v, d2[k]):
-        return False
-    else:
-      if v != d2[k]:
-        return False
-  return True
-
-
 class Server:
   def __init__(self, run_name: str, algorithm: Algorithm, model: Model,
                num_parallel_processes: int, call_type: str = 'init',
@@ -57,7 +44,6 @@ class Server:
       # Retrieve args (set by the user) passed to Model and Algorithm objects
       algorithm_args = list_public_attributes(algorithm)
       algorithm_args = {key: algorithm.__dict__[key] for key in algorithm_args}
-      # self.model_args = model.args_to_json() # {key: model.__dict__[key] for key in model_args}
 
       # Define paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = os.path.abspath(sys.modules[algorithm_type.__module__].__file__)
@@ -72,8 +58,6 @@ class Server:
       self.init(algorithm_type, algorithm_args, model, **kwargs)
 
     elif call_type == "run_model":
-      # model_type = model    # Note: model will always be 'type' here, not object. 'run_model' called by Server not user
-
       # Reload paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
       self.model_path = kwargs.pop('model_path')
@@ -86,11 +70,6 @@ class Server:
       self.run_model(**kwargs)
 
     elif call_type == "server_callback":
-      # algorithm_type = algorithm    # Note: alg will always be 'type' here, not object. 'server_callback' called by Server not user
-
-      # Set args passed to Model and Algorithm objects
-      # self.model_args = kwargs.pop('model_args')
-
       # Reload paths to model and algorithm files (used for loading in subprocess)
       self.algorithm_path = kwargs.pop('algorithm_path')
       self.model_path = kwargs.pop('model_path')
@@ -105,14 +84,10 @@ class Server:
     else:
       raise Exception(f"error, improper call_type: {call_type}")
 
-  # Initialization procedure:
-  # 1. Create directories for run
-  # 2. Create run status file. Status file represents state of genetic algorithm (sync. between all models)
-  # 3. Generate initial params (and save updated status)
-  # 4. Call models to run initial params
+  # Initialize run
   def init(self, algorithm_type: type, algorithm_args: dict, model: Model, **kwargs):
 
-    # Make directory if needed
+    # Make run directories
     # TODO: This prevents continuing runs.
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
@@ -144,9 +119,7 @@ class Server:
     params = load_params_file_async(self.run_name, params_name)      # All params info (inc. fitness, etc.)
     model = load_model(self.run_name) 
 
-    # Load data using file locks (presumably training data)
-    data_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-    # with portalocker.Lock(data_lock_path, timeout=100) as _:
+    # Load data
     model.load_data()
 
     # Test params
@@ -166,13 +139,10 @@ class Server:
 
   def server_callback(self, **kwargs):
 
-    # Lock pool files during params creation to prevent race condition
-    pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-
     # Setup algorithm by loading from file
     # - updates pool and history based on files which other agents may have changed
     while True:
-      alg = load_algorithm_async(self.run_name)
+      alg = load_algorithm_async(self.run_name, buffer_length=self.num_parallel_processes)
       if alg.history is not None:
         alg.history.update(alg.load_history(async_=True))
       alg.pool.update(alg.load_pool(async_=True))
