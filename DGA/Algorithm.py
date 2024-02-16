@@ -85,6 +85,7 @@ class Genetic_Algorithm_Base:
       self.history = None
 
     # Initialize logging vars
+    # NOT CURRENTLY USED
     self.log_vars = ['timestamp', 'fitness', 'iteration']
     self.log_vars.extend(additional_log_vars)
 
@@ -166,7 +167,7 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
                num_parents: int = 2,
                **kwargs) -> None:
     super().__init__(num_params, iterations, genome, **kwargs)
-    self.num_parents = num_parents  # TODO: Implement this
+    self.num_parents = num_parents
 
   # Fetch a new Parameters from pool for testing.
   # Inputs: None

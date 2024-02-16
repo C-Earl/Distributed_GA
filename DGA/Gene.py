@@ -63,19 +63,28 @@ class Parameters(dict):
 # Subsection of genome. Object contains basic information about that subsection
 class Gene():
   def __init__(self,
-               shape: tuple,
                dtype: type,
                default: any = None,
                min_val: float = -1,
                max_val: float = +1,
+               shape: tuple = None,
+               mutation_rate: float = 0.5,
+               mutation_scale: float = 0.1,
                **kwargs):
     self.shape = shape
     self.dtype = dtype
     self.default = default
     self.min_val = min_val
     self.max_val = max_val
+    self.mutation_rate = mutation_rate
+    self.mutation_scale = mutation_scale
     for key, val in kwargs.items():
       setattr(self, key, val)
+
+    # Lock min-max if type is bool
+    if dtype == bool:
+      self.min_val = 0
+      self.max_val = 1
     super().__init__()
 
   def to_json(self):
@@ -102,12 +111,19 @@ class Genome(dict):
       gdefault = gene.default
       if gdefault is not None:    # If default value is provided, use it
         new_params[gene_name] = gdefault
+      if gene.dtype == bool:      # If gene is boolean, randomly generate True/False
+        new_params[gene_name] = np.random.choice([True, False], size=gene.shape)
       else:
         gshape = gene.shape       # Otherwise, uniform generate values in gene range
         gmin = gene.min_val
         gmax = gene.max_val
         gtype = gene.dtype
-        new_params[gene_name] = np.random.uniform(low=gmin, high=gmax, size=gshape).astype(gtype)
+        new_params[gene_name] = np.random.uniform(low=gmin, high=gmax, size=gshape)
+        if gshape is not None:
+          new_params[gene_name] = new_params[gene_name].astype(gtype)
+        else:
+          new_params[gene_name] = gtype(new_params[gene_name])
+
     return new_params
 
   # Takes in a Parameters object and mutates it (Note: Returns same Parameters object)
@@ -116,8 +132,17 @@ class Genome(dict):
   def mutate(self, params: Parameters) -> Parameters:
     for gene_name, gene in self.items():
       gshape = gene.shape
-      gtype = gene.dtype      # Apply uniform mutation to each gene
-      params[gene_name] += np.random.uniform(low=-1, high=+1, size=gshape).astype(gtype)
+      gtype = gene.dtype
+      gmin = gene.min_val
+      gmax = gene.max_val
+      mut_rate = gene.mutation_rate
+      mut_scale = gene.mutation_scale
+      if np.random.uniform() < mut_rate:
+        if gshape is not None:
+          params[gene_name] += np.random.uniform(low=-mut_scale, high=mut_scale, size=gshape).astype(gtype)
+        else:
+          params[gene_name] += np.random.uniform(low=-mut_scale, high=mut_scale)
+        params[gene_name] = np.clip(params[gene_name], gmin, gmax)
     return params
 
   # Takes in a Parameters object and crosses it with another Parameters object
@@ -127,11 +152,18 @@ class Genome(dict):
     p1, p2 = parents[0], parents[1]  # Only two parents used for now, change later
     child_params = Parameters(iteration=iteration)
     for gene_name, gene in self.items():
-      gshape = p1[gene_name].shape
-      full_index = np.prod(gshape)
-      splice = np.random.randint(low=0, high=full_index)
-      new_param = np.concatenate([p1[gene_name].flatten()[:splice], p2[gene_name].flatten()[splice:]])
-      child_params[gene_name] = new_param.reshape(gshape)
+      gshape = gene.shape
+      p1_gene = p1[gene_name]
+      p2_gene = p2[gene_name]
+      if gshape is not None:   # If scalar, choose one parent's value
+        gshape = p1[gene_name].shape
+        full_index = np.prod(gshape)
+        splice = np.random.randint(low=0, high=full_index)
+        new_param = np.concatenate([p1_gene.flatten()[:splice], p2_gene.flatten()[splice:]])
+        child_params[gene_name] = new_param.reshape(gshape)
+      else:
+        child_params[gene_name] = np.random.choice([p1_gene, p2_gene], p=[0.5, 0.5])
+
     return child_params
 
 

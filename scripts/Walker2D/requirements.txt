@@ -1,0 +1,4 @@
+gymnasium
+gymnasium[mujoco]
+pybullet
+torch

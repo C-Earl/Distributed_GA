@@ -32,7 +32,12 @@ class Model():
     log = {}
     # if 'timestamp' in self.log_vars:
     #   log.update({'timestamp': time.strftime('%H:%M:%S', time.localtime())})
-    log.update({key: getattr(params, key) for key in self.log_vars})
+    for key in self.log_vars:
+      if hasattr(params, key):    # Check attributes
+        log[key] = getattr(params, key)
+      elif key in params:         # Check actual parameters
+        log[key] = params[key]
+    # log.update({key: getattr(params, key) for key in self.log_vars})
     return log
 
   # Run model

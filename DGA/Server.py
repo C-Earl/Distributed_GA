@@ -3,7 +3,6 @@ import os.path
 import subprocess
 from os.path import join as file_path
 import numpy as np
-import portalocker
 import sys
 import argparse
 import time

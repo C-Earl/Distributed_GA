@@ -139,6 +139,13 @@ def write_log(run_name: str, agent_id: int, log: dict | np.ndarray):
     log_file.write(json.dumps(log) + "\n")    # Not json.dump because want each log on a new line
 
 
+def write_logs(run_name: str, agent_id: int, logs: list):
+  log_path = file_path(run_name, LOG_DIR, f'{AGENT_NAME}_{str(agent_id)}' + ".log")
+  with open(log_path, 'a+') as log_file:
+    for log in logs:
+      log_file.write(json.dumps(log) + "\n")    # Not json.dump because want each log on a new line
+
+
 # Read from log file
 def read_log(run_name: str, agent_id: int):
   log_path = file_path(run_name, LOG_DIR, f'{AGENT_NAME}_{str(agent_id)}' + ".log")
