@@ -16,6 +16,7 @@ import ast
 # Constants for filesystem
 POOL_DIR = "pool"
 LOG_DIR = "logs"
+SERVER_LOG_DIR = "server_logs"
 ALG_DIR = "algorithm_buffer"
 JOB_ID_DIR = "agent_ids"
 RUN_INFO_DIR = "run_info"

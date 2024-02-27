@@ -1,3 +1,4 @@
+import logging
 import copy
 import os.path
 import subprocess
@@ -6,10 +7,10 @@ import numpy as np
 import sys
 import argparse
 import time
-from DGA.File_IO import write_params_file, load_params_file, POOL_DIR, LOG_DIR, RUN_INFO, POOL_LOCK_NAME, write_log, \
+from DGA.File_IO import write_params_file, load_params_file, POOL_DIR, LOG_DIR, RUN_INFO_DIR, POOL_LOCK_NAME, write_log, \
   write_model_args_to_file, load_model_args_from_file, \
   delete_params_file, write_error_log, save_model, load_model, save_algorithm, load_algorithm, load_params_file_async, \
-  load_algorithm_async, delete_params_file_async, save_algorithm_async
+  load_algorithm_async, delete_params_file_async, save_algorithm_async, load_agent_job_ID, SERVER_LOG_DIR, ALG_DIR
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
 
@@ -26,11 +27,11 @@ class Server:
                num_parallel_processes: int, call_type: str = 'init',
                data_path: str = None, log_pool: int = -1, **kwargs):
 
-    self.run_name = run_name        # Name of run (used for folder name)
+    self.run_name = run_name  # Name of run (used for folder name)
     self.num_parallel_processes = num_parallel_processes
-    self.data_path = data_path      # Location of data folder (if needed, for async loading)
-    self.server_file_path = os.path.abspath(__file__)   # Note: CWD not the same as DGA folder
-    self.log_pool = log_pool        # Log pool-state every n params (-1 for no logging)
+    self.data_path = data_path  # Location of data folder (if needed, for async loading)
+    self.server_file_path = os.path.abspath(__file__)  # Note: CWD not the same as DGA folder
+    self.log_pool = log_pool  # Log pool-state every n params (-1 for no logging)
 
     # Switch for handling model, server, or run initialization
     if call_type == "init":
@@ -90,15 +91,16 @@ class Server:
     # TODO: This prevents continuing runs.
     os.makedirs(file_path(self.run_name, POOL_DIR), exist_ok=True)
     os.makedirs(file_path(self.run_name, LOG_DIR), exist_ok=True)
-    os.makedirs(file_path(self.run_name, RUN_INFO), exist_ok=True)
-    os.makedirs(file_path(self.run_name, RUN_INFO, "algorithm_buffer"), exist_ok=True)
+    os.makedirs(file_path(self.run_name, LOG_DIR, SERVER_LOG_DIR), exist_ok=True)
+    os.makedirs(file_path(self.run_name, RUN_INFO_DIR), exist_ok=True)
+    os.makedirs(file_path(self.run_name, RUN_INFO_DIR, ALG_DIR), exist_ok=True)
 
     # Generate initial params
     alg = algorithm_type(run_name=self.run_name, **algorithm_args)
     original_pool = copy.deepcopy(alg.pool)
     init_params = []
     for i in range(self.num_parallel_processes):
-      init_params.append(alg.fetch_params(agent_id=i)[0])    # Don't need status on init, just params
+      init_params.append(alg.fetch_params(agent_id=i)[0])  # Don't need status on init, just params
 
     # Update pool files (Parameter files)
     final_pool = alg.pool
@@ -112,11 +114,12 @@ class Server:
     for i, p_name in enumerate(init_params):
       self.make_call(i, p_name, "run_model", **kwargs)
 
+  # Run model with given params
   def run_model(self, **kwargs):
     # Setup model
     params_name = kwargs['params_name']
-    params = load_params_file_async(self.run_name, params_name)      # All params info (inc. fitness, etc.)
-    model = load_model(self.run_name) 
+    params = load_params_file_async(self.run_name, params_name)  # All params info (inc. fitness, etc.)
+    model = load_model(self.run_name)
 
     # Load data
     model.load_data()
@@ -134,8 +137,9 @@ class Server:
     write_log(self.run_name, kwargs['agent_id'], model.logger(params))
 
     # Callback server
-    self.make_call(call_type="server_callback", **kwargs)   # Other args contained in kwargs
+    self.make_call(call_type="server_callback", **kwargs)  # Other args contained in kwargs
 
+  # Callback server to get next params
   def server_callback(self, **kwargs):
 
     # Setup algorithm by loading from file
@@ -175,16 +179,17 @@ class Server:
     kwargs.pop('params_name')
     self.make_call(call_type="run_model", params_name=params_name, **kwargs)
 
+  # Update pool files (files with Parameter data)
   def update_pool(self, original_pool: dict, new_pool: dict):
     # Injective check from new_pool to original_pool
     for params_name in new_pool.keys():
-      if params_name not in original_pool.keys():     # If it's a newly added params
+      if params_name not in original_pool.keys():  # If it's a newly added params
         new_params_data = new_pool[params_name]
         write_params_file(self.run_name, params_name, new_params_data)
 
     # Injective check from original_pool to new_pool
     for params_name in original_pool.keys():
-      if params_name not in new_pool.keys():          # If it's a removed params
+      if params_name not in new_pool.keys():  # If it's a removed params
         delete_params_file_async(self.run_name, params_name)
 
   # Save important args to file and run next phase (callback or run_model)
@@ -195,21 +200,23 @@ class Server:
                 call_type: str,
                 **kwargs):
     write_model_args_to_file(agent_id=agent_id,
-                              params_name=params_name,
-                              call_type=call_type,  # callback or run_model
-                              run_name=self.run_name,
-                              algorithm_path=self.algorithm_path,
-                              algorithm_name=self.algorithm_name,
-                              model_path=self.model_path,
-                              model_name=self.model_name,
-                              genome_path=self.genome_path,
-                              genome_name=self.genome_name,
-                              gene_paths=self.gene_paths,
-                              gene_names=self.gene_names,
-                              num_parallel_processes=self.num_parallel_processes,
-                              data_path=self.data_path,
-                              log_pool=self.log_pool,
-                              **kwargs)
+                             params_name=params_name,
+                             call_type=call_type,  # callback or run_model
+                             run_name=self.run_name,
+                             algorithm_path=self.algorithm_path,
+                             algorithm_name=self.algorithm_name,
+                             model_path=self.model_path,
+                             model_name=self.model_name,
+                             genome_path=self.genome_path,
+                             genome_name=self.genome_name,
+                             gene_paths=self.gene_paths,
+                             gene_names=self.gene_names,
+                             num_parallel_processes=self.num_parallel_processes,
+                             data_path=self.data_path,
+                             log_pool=self.log_pool,
+                             **kwargs)
+
+    # Save
 
     # Run command according to OS
     # TODO: SOMEONE DO THIS FOR MAC PLEASE
@@ -217,9 +224,10 @@ class Server:
       p = subprocess.Popen(["python3", self.server_file_path, f"--run_name={self.run_name}", f"--agent_id={agent_id}"])
     elif sys.platform == "win32":
       p = subprocess.Popen(["python", self.server_file_path, f"--run_name={self.run_name}", f"--agent_id={agent_id}"],
-                         shell=True)
+                           shell=True)
     elif sys.platform == "darwin":
-      pass    # MAC HANDLING
+      pass  # MAC HANDLING
+
 
 # Main function catches server-callbacks & runs models
 # NOTE:
@@ -250,7 +258,7 @@ if __name__ == '__main__':
   gene_paths_ = all_args['gene_paths']
   gene_names_ = all_args['gene_names']
   server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
-  base_path_ = '/'.join(server_path_.split('/')[0:-2])    # Get path to "./Distributed_GA" ie. base folder
+  base_path_ = '/'.join(server_path_.split('/')[0:-2])  # Get path to "./Distributed_GA" ie. base folder
   alg_module_path_ = file_path(base_path_, '/'.join(algorithm_path_.split('/')[0:-1]))
   model_module_path_ = file_path(base_path_, '/'.join(model_path_.split('/')[0:-1]))
   genome_module_path_ = file_path(base_path_, '/'.join(genome_path_.split('/')[0:-1]))
@@ -272,12 +280,17 @@ if __name__ == '__main__':
   genome_module_ = __import__(genome_module_name_)
   genome_ = getattr(genome_module_, genome_name_)
   genes_ = [getattr(__import__(gene_name_), gene_name_) for gene_name_ in gene_names_]
-  all_args['algorithm'] = None      # Can't load until obtained file lock
+  all_args['algorithm'] = None  # Can't load until obtained file lock
   all_args['model'] = None
+
+  # Create logger for server
+  logging.basicConfig(filename=str(file_path(all_args['run_name'], LOG_DIR, SERVER_LOG_DIR, f"AGENT_{args_.agent_id}.log")),
+                      encoding='utf-8',
+                      level=logging.DEBUG)
 
   # Run server protocol with bash kwargs
   try:
     Server(**all_args)
-  except Exception as e:
-    write_error_log(all_args['run_name'], {'error': str(e)})
-    raise e
+  except:
+    logging.exception(f" Error on Agent {args_.agent_id}:")
+    raise
