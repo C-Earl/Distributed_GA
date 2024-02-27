@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import time
 from os.path import join as file_path
@@ -99,7 +100,7 @@ def load_params_file(run_name: str, params_name: str):
 
 
 # Load params from file, handle for asynchronous errors
-def load_params_file_async(run_name: str, params_name: str):
+def load_params_file_async(run_name: str, params_name: str,):
   while True:
     try:
       return load_params_file(run_name, params_name)
@@ -107,14 +108,16 @@ def load_params_file_async(run_name: str, params_name: str):
     # File is being written to by other agent, wait and try again
     except EOFError:
       time.sleep(np.random.rand() * 0.1)
-      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-        log_file.write(f"EOFError loading params {params_name}\n")
+      logging.warning(f"EOFError loading params {params_name}")
+      # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      #   log_file.write(f"EOFError loading params {params_name}\n")
 
     # File is being written to by other agent, wait and try again
     except pickle.UnpicklingError:
       time.sleep(np.random.rand() * 0.1)
-      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-        log_file.write(f"Error unpickling params file {params_name}\n")
+      logging.warning(f"Error unpickling params file {params_name}")
+      # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      #   log_file.write(f"Error unpickling params file {params_name}\n")
 
     # File removed by other agent, return None (no params)
     except FileNotFoundError:
@@ -187,9 +190,10 @@ def load_history_async(run_name: str):
 
     # Log is being written to by other agent, wait and try again
     except EOFError:
+      logging.warning(f"EOFError loading history")
       time.sleep(np.random.rand() * 0.1)
-      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-        log_file.write(f"EOFError loading history\n")
+      # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      #   log_file.write(f"EOFError loading history\n")
 
 
 def write_pool_log(run_name: str, pool_log: dict):
@@ -285,20 +289,23 @@ def load_algorithm_async(run_name: str, buffer_length: int, max_attempts: int = 
 
     # File is being written to, wait a bit and try again
     except EOFError as e:
-      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-        log_file.write(f"EOF error with algorithm: {e}\n")
+      # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      #   log_file.write(f"EOF error with algorithm: {e}\n")
+      logging.warning(f"EOF error with algorithm: {e}")
       time.sleep(np.random.rand() * 0.1)
 
     # File not found, wait a bit and try again
     except FileNotFoundError as e:
-      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-        log_file.write(f"File Not Found error with algorithm: {e}\n")
+      # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      #   log_file.write(f"File Not Found error with algorithm: {e}\n")
+      logging.warning(f"File Not Found error with algorithm: {e}")
       time.sleep(np.random.rand() * 0.1)
 
     # Corrupt file detected, remove it & try to load again (should get next most recent file)
     except Exception as e:
-      with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-        log_file.write(f"Error loading algorithm: {e}\n")
+      # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+      #   log_file.write(f"Error loading algorithm: {e}\n")
+      logging.warning(f"Error loading algorithm: {e}")
       try:
         os.remove(alg_path)
       except FileNotFoundError:
@@ -306,8 +313,8 @@ def load_algorithm_async(run_name: str, buffer_length: int, max_attempts: int = 
 
   # Max attempts reached, shut down agent
   if c == max_attempts - 1:
-    with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
-      log_file.write(f"Max load attempts, shutting down agent\n")
+    # with open(file_path(run_name, LOG_DIR, ERROR_LOG_NAME), 'a') as log_file:
+    #   log_file.write(f"Max load attempts, shutting down agent\n")
     raise Exception("Max load attempts, shutting down agent")
 
   # Trim buffer
