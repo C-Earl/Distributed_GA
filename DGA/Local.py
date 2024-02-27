@@ -5,11 +5,14 @@ from DGA.Server import list_public_attributes, LOG_DIR
 from DGA.File_IO import write_logs, AGENT_NAME
 import os
 from os.path import join as file_path
+import shutil
 
 
 class Synchronized:
   def __init__(self, run_name: str, algorithm: Algorithm, model: Model, log_freq: int = -1, **kwargs):
     # Create run folder
+    if os.path.exists(file_path(run_name, LOG_DIR)):
+      shutil.rmtree(file_path(run_name, LOG_DIR))
     os.makedirs(file_path(run_name, LOG_DIR), exist_ok=True)
 
     # Re-initialize algorithm (necessary workaround from async version)

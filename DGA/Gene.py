@@ -70,6 +70,7 @@ class Gene():
                shape: tuple = None,
                mutation_rate: float = 0.5,
                mutation_scale: float = 0.1,
+               set_vals: set = None,
                **kwargs):
     self.shape = shape
     self.dtype = dtype
@@ -85,6 +86,13 @@ class Gene():
     if dtype == bool:
       self.min_val = 0
       self.max_val = 1
+
+    # Remove min-max if type is set & init set_vals
+    if dtype == set:
+      self.set_vals = set_vals
+      self.min = None
+      self.max = None
+
     super().__init__()
 
   def to_json(self):
@@ -138,9 +146,13 @@ class Genome(dict):
       mut_rate = gene.mutation_rate
       mut_scale = gene.mutation_scale
       if np.random.uniform() < mut_rate:
-        if gshape is not None:
+        if gene.dtype == bool:  # If gene is boolean, flip value
+          params[gene_name] = np.logical_not(params[gene_name])
+          continue
+
+        if gshape is not None:    # If gene is array, mutate each element
           params[gene_name] += np.random.uniform(low=-mut_scale, high=mut_scale, size=gshape).astype(gtype)
-        else:
+        else:                # If gene is scalar, mutate the value
           params[gene_name] += np.random.uniform(low=-mut_scale, high=mut_scale)
         params[gene_name] = np.clip(params[gene_name], gmin, gmax)
     return params

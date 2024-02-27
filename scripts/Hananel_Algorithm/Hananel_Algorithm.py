@@ -43,7 +43,6 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.diversity_history = []  # History of diversity scores
     self.diversity_matrix = np.zeros((self.num_params, self.num_params))  # Distance between all params
     self.agent_iterations = np.zeros(self.num_params, dtype=int)          # Iterations per agent (per epoch)
-    self.mutation_rate = 0.1    # Dynamically adjusted mutation rate
 
   # Fetch a new Parameters from pool for testing.
   # Inputs: None

@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "setuptools.build_meta"
-requires = ["setuptools", 'numpy', 'portalocker', 'jsbeautifier', 'matplotlib', 'PySide2']
+requires = ["setuptools", 'numpy', 'scipy', 'portalocker', 'jsbeautifier', 'matplotlib', 'PySide2']
 
 [project]
 name = "DGA"

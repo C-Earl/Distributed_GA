@@ -8,7 +8,7 @@ if __name__ == '__main__':
   VECTOR_SHAPE = (10, 10)
 
   genome = Genome()
-  gene = Gene(shape=VECTOR_SHAPE, dtype=float, min_val=-10, max_val=10)
+  gene = Gene(shape=VECTOR_SHAPE, dtype=float, min_val=-10, max_val=10, mutation_rate=0.5, mutation_scale=1)
   genome.add_gene(gene, 'vector_gene')
 
   mod = Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)

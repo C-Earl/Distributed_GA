@@ -80,7 +80,7 @@ class Critic(nn.Module):
     return x1
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = 'cpu' # torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class TD3(object):
 
   def __init__(self, state_dim, action_dim, max_action):

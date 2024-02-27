@@ -24,14 +24,7 @@ class Model():
 
   # Write to log
   def logger(self, params: Parameters):
-    # log = {
-    #   "timestamp" : time.strftime('%H:%M:%S', time.localtime()),
-    #   "fitness" : params.fitness,
-    #   "iteration" : params.iteration,
-    # }
     log = {}
-    # if 'timestamp' in self.log_vars:
-    #   log.update({'timestamp': time.strftime('%H:%M:%S', time.localtime())})
     for key in self.log_vars:
       if hasattr(params, key):    # Check attributes
         log[key] = getattr(params, key)
