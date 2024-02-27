@@ -86,8 +86,8 @@ class Hananel_Algorithm(Genetic_Algorithm):
       self.pool[params_name] = new_params
       return params_name, True
 
-    # If there aren't at least 2 genes in pool, can't create new gene
-    elif len(self.valid_parents.items()) < 2:
+    # If there aren't at least num_parents genes in pool, can't create new gene
+    elif len(self.valid_parents.items()) < self.num_parents:
       self.total_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
       self.epoch_iter -= 1
       return None, False
@@ -169,12 +169,19 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Inputs: None
   # Outputs: None
   def trim_pool(self) -> None:
+    # Handle for when async causes overpopulation
     if len(self.valid_parents) > self.num_params:
       num_to_remove = len(self.valid_parents) - self.num_params
       sorted_params = self.sort_params(self.valid_parents)
       for i in range(num_to_remove):
         param_name = sorted_params[-(i+1)][0]
         del self.pool[param_name]
+
+    # Remove worst params based on fitness
+    else:
+      sorted_params = self.sort_params(self.valid_parents)
+      worst_params_name = sorted_params[-1][0]
+      del self.pool[worst_params_name]
     # worst_params_name = sorted_params[-1][0]
     # del self.pool[worst_params_name]  # Remove from pool
 
@@ -187,9 +194,13 @@ class Hananel_Algorithm(Genetic_Algorithm):
     fitness_scores = [params.fitness + params.proximity_penalty for params in params_list]
     normed_fitness = self.pos_normalize(fitness_scores)  # Shift fitness's to [0, +inf)
 
-    # Get (normalized) diversity scores
-    normalized_dmat = (self.diversity_matrix - self.diversity_matrix.min()) / (
-        self.diversity_matrix.max() - self.diversity_matrix.min())  # Normalize to [0, 1]
+    # Get (normalized to [0, 1]) diversity scores
+    if self.diversity_matrix.max() == self.diversity_matrix.min():
+      # Avoid divide by zero. Logically, all diversity scores are equal in this case
+      normalized_dmat = np.zeros(self.num_params)
+    else:
+      normalized_dmat = (self.diversity_matrix - self.diversity_matrix.min()) / (
+        self.diversity_matrix.max() - self.diversity_matrix.min())
     param_diversities = np.array([param_div.mean() for param_div in normalized_dmat])
 
     ### IMPLEMENT ME ###
@@ -199,12 +210,18 @@ class Hananel_Algorithm(Genetic_Algorithm):
 
     # Calculate probabilities
     probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
-    probabilities /= np.sum(normed_fitness + param_diversities)
-    max_ind = np.argmax(probabilities)
-    for i, p in enumerate(probabilities):
-      if p == 0:
-        probabilities[i] += 1e-5
-        probabilities[max_ind] -= 1e-5
+    # If all probabilities are 0 or contain NaN, set to uniform
+    if probabilities.sum() == 0 or (np.isnan(probabilities)).any():
+      probabilities = np.ones(self.num_params) / self.num_params
+    else:
+      probabilities /= np.sum(normed_fitness + param_diversities)
+
+    # max_ind = np.argmax(probabilities)
+    # for i, p in enumerate(probabilities):
+    #   if p == 0:
+    #     probabilities[i] += 1e-5
+    #     probabilities[max_ind] -= 1e-5
+
     parent_inds = np.random.choice(np.arange(len(probabilities)), replace=False, p=probabilities,
                                    size=self.num_parents)
     return [params_list[i] for i in parent_inds]
