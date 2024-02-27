@@ -1,10 +1,12 @@
 import os.path
+import subprocess
 from os.path import join as file_path
 from os import system as cmd
 import sys
 import argparse
 from portalocker.exceptions import LockException
-from DGA.File_IO import write_model_args_to_file, load_model_args_from_file, write_error_log
+from DGA.File_IO import write_model_args_to_file, load_model_args_from_file, write_error_log, load_agent_job_ID, \
+  save_agent_job_ID, RUN_INFO_DIR, JOB_ID_DIR
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
 from DGA.Server import Server
@@ -15,7 +17,11 @@ class Server_SLURM(Server):
                num_parallel_processes: int, sbatch_script: str, callback_sbatch_script: str = None, call_type: str = 'init',
                data_path: str = None, log_pool: int = -1, **kwargs):
     self.sbatch_script = sbatch_script
-    self.callback_sbatch_script = callback_sbatch_script
+    # self.callback_sbatch_script = callback_sbatch_script
+
+    # Create job_id directory. Keep track of what agent is running what job
+    os.makedirs(file_path(run_name, RUN_INFO_DIR, JOB_ID_DIR), exist_ok=True)
+
     super().__init__(run_name, algorithm, model, num_parallel_processes, call_type, data_path, log_pool, **kwargs)
 
   # Save args for model, and make sbatch calls
@@ -46,17 +52,41 @@ class Server_SLURM(Server):
     # Call sbatch script
     if call_type == 'run_model':
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
-      cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
+      # cmd(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
+
+      # out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
+      # job_id = int(out_string.split()[-1])        # out_string = "Submitted batch job <job-id>"
+
+      import numpy as np
+      job_id = str(np.random.randint(1000000))
+
+      print(f"Submitted job {job_id} for agent {agent_id}")
+      save_agent_job_ID(self.run_name, agent_id, job_id)
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
       self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
 
+  # Overide for Server.server_callback
+  # Check if 'neighbor' agent is still running
+  def server_callback(self, agent_id: int, params_name: str, **kwargs):
+    # Load runtime for agent (self.agent_id + 1)
+    # If last agent, load agent 0
+    neighbor_agent_id = (agent_id + 1) % self.num_parallel_processes
+    neighbor_agent_job_id = load_agent_job_ID(self.run_name, neighbor_agent_id)
 
-    # elif call_type == 'server_callback':
-    #   # Check if need to call new node for callback. If not, run callback on current node
-    #   if self.callback_sbatch_script is not None:
-    #     cmd(f"sbatch {self.callback_sbatch_script} {agent_id} {self.run_name} {server_path_}")
-    #   else:
-    #     self.server_callback(**kwargs, agent_id=agent_id)
+    # Check neighbor still running
+    run_state = subprocess.check_output(f"seff {neighbor_agent_job_id} | grep 'State'")
+    run_state = run_state.split()[1]
+    print("DEBUG, current run_state: ", run_state)
+    # acceptable_states = ['PENDING', 'RUNNING', 'COMPLETED', 'COMPLETING', "SUSPENDED", "CONFIGURING"]
+    crash_states = ['BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
+    if run_state in crash_states:
+      # Find neighbors assigned params
+      neighbor_args = load_model_args_from_file(neighbor_agent_id, self.run_name)
+      neighbor_params_name = neighbor_args['params_name']
+      self.make_call(neighbor_agent_id, neighbor_params_name, 'run_model', **kwargs)
+
+    # Proceed with normal callback
+    super().server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
 
 # Main function catches server-callbacks & runs models
 if __name__ == '__main__':

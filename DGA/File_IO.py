@@ -17,15 +17,14 @@ import ast
 POOL_DIR = "pool"
 LOG_DIR = "logs"
 ALG_DIR = "algorithm_buffer"
-RUN_INFO = "run_info"
+JOB_ID_DIR = "agent_ids"
+RUN_INFO_DIR = "run_info"
 POOL_LOG_NAME = "POOL_LOG.log"
 POOL_LOCK_NAME = "POOL_LOCK.lock"
-DATA_LOCK_NAME = "DATA_LOCK.lock"
 RUN_STATUS_NAME_JSON = "RUN_STATUS.json"
 RUN_STATUS_NAME_PKL = "RUN_STATUS.pkl"
 ERROR_LOG_NAME = "ERROR_LOG.log"
 AGENT_NAME = "AGENT"
-
 
 # Transform any non-json compatible types
 def jsonify(d: dict):
@@ -47,17 +46,28 @@ def jsonify(d: dict):
   return d
 
 
+def load_agent_job_ID(run_name: str, agent_id: int):
+  with open(file_path(run_name, RUN_INFO_DIR, JOB_ID_DIR, f"AGENT_{agent_id}_JID.txt"), 'r') as jid_file:
+    job_id = jid_file.readlines()[0]
+  return job_id
+
+
+def save_agent_job_ID(run_name: str, agent_id:int, job_id: str):
+  with open(file_path(run_name, RUN_INFO_DIR, JOB_ID_DIR, f"AGENT_{agent_id}_JID.txt"), 'w') as jid_file:
+    jid_file.write(job_id)
+
+
 # Arguments passed to model process are first written to file. This function writes them.
 def write_model_args_to_file(agent_id: int, **kwargs):
   kwargs['agent_id'] = agent_id
 
   # Write to pkl
-  args_path = file_path(kwargs['run_name'], RUN_INFO, f"{AGENT_NAME}_{agent_id}_args.pkl")
+  args_path = file_path(kwargs['run_name'], RUN_INFO_DIR, f"{AGENT_NAME}_{agent_id}_args.pkl")
   with open(args_path, 'wb') as args_file:
     pickle.dump(kwargs, args_file)
 
   # Write to json
-  args_path = file_path(kwargs['run_name'], RUN_INFO, f"{AGENT_NAME}_{agent_id}_args.json")
+  args_path = file_path(kwargs['run_name'], RUN_INFO_DIR, f"{AGENT_NAME}_{agent_id}_args.json")
   kwargs_json = jsonify(copy.deepcopy(kwargs))
   with open(args_path, 'w') as args_file:
     json.dump(kwargs_json, args_file, indent=2)
@@ -65,7 +75,7 @@ def write_model_args_to_file(agent_id: int, **kwargs):
 
 # Server writes args to file, model process the loads with this function
 def load_model_args_from_file(agent_id: int, run_name: str):
-  args_path = file_path(run_name, RUN_INFO, f"{AGENT_NAME}_{agent_id}_args.pkl")   # Only load from pickle file
+  args_path = file_path(run_name, RUN_INFO_DIR, f"{AGENT_NAME}_{agent_id}_args.pkl")   # Only load from pickle file
   with open(args_path, 'rb') as args_file:
     return pickle.load(args_file)
 
@@ -196,13 +206,13 @@ def write_error_log(run_name: str, error_log: dict):
 
 
 def save_model(run_name: str, model: Model):
-  model_path = file_path(run_name, RUN_INFO, f"model.pkl")
+  model_path = file_path(run_name, RUN_INFO_DIR, f"model.pkl")
   with open(model_path, 'wb') as model_file:
     pickle.dump(model, model_file)
 
 
 def load_model(run_name: str):
-  model_path = file_path(run_name, RUN_INFO, f"model.pkl")
+  model_path = file_path(run_name, RUN_INFO_DIR, f"model.pkl")
   with open(model_path, 'rb') as model_file:
     model = pickle.load(model_file)
   return model
@@ -210,14 +220,14 @@ def load_model(run_name: str):
 
 # Save single algorithm file for synchronized runs
 def save_algorithm(run_name: str, algorithm):
-  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  alg_path = file_path(run_name, RUN_INFO_DIR, f"algorithm.pkl")
   with open(alg_path, 'wb') as alg_file:
     pickle.dump(algorithm, alg_file)
 
 
 # Load algorithm file for synchronized runs (only 1 file)
 def load_algorithm(run_name: str):
-  alg_path = file_path(run_name, RUN_INFO, f"algorithm.pkl")
+  alg_path = file_path(run_name, RUN_INFO_DIR, f"algorithm.pkl")
   with open(alg_path, 'rb') as alg_file:
     model = pickle.load(alg_file)
   return model
@@ -256,7 +266,7 @@ def load_pool_async(run_name: str):
 def save_algorithm_async(run_name: str, algorithm):
   save_name = str(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
   random_string = ''.join([str(np.random.randint(0, 9)) for _ in range(100)])
-  alg_path = file_path(run_name, RUN_INFO, ALG_DIR, f"{save_name}_{random_string}")  # Random string ensures unique name
+  alg_path = file_path(run_name, RUN_INFO_DIR, ALG_DIR, f"{save_name}_{random_string}")  # Random string ensures unique name
   with open(alg_path, 'wb') as alg_file:
     pickle.dump(algorithm, alg_file)
 
@@ -264,9 +274,9 @@ def save_algorithm_async(run_name: str, algorithm):
 # Load algorithm file for asynchronous runs (select most recent from buffer)
 def load_algorithm_async(run_name: str, buffer_length: int, max_attempts: int = 1000):
   for c in range(max_attempts):
-    alg_saves = os.listdir(file_path(run_name, RUN_INFO, ALG_DIR))
+    alg_saves = os.listdir(file_path(run_name, RUN_INFO_DIR, ALG_DIR))
     alg_saves.sort(key=lambda x: x.split('_')[0])
-    alg_path = file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[-1])    # Select most recent save...
+    alg_path = file_path(run_name, RUN_INFO_DIR, ALG_DIR, alg_saves[-1])    # Select most recent save...
     try:
       with open(alg_path, 'rb') as alg_file:      # ...and try to load it
         alg = pickle.load(alg_file)
@@ -304,7 +314,7 @@ def load_algorithm_async(run_name: str, buffer_length: int, max_attempts: int = 
     num_remove = len(alg_saves) - buffer_length
     for i in range(num_remove):
       try:    # Attempt to remove file
-        os.remove(file_path(run_name, RUN_INFO, ALG_DIR, alg_saves[i]))
+        os.remove(file_path(run_name, RUN_INFO_DIR, ALG_DIR, alg_saves[i]))
 
       # File already removed, pass
       except FileNotFoundError:
