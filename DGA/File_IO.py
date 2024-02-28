@@ -54,7 +54,7 @@ def load_agent_job_ID(run_name: str, agent_id: int):
   return job_id
 
 
-def save_agent_job_ID(run_name: str, agent_id:int, job_id: str):
+def save_agent_job_ID(run_name: str, agent_id: int, job_id: str):
   with open(file_path(run_name, RUN_INFO_DIR, JOB_ID_DIR, f"AGENT_{agent_id}_JID.txt"), 'w') as jid_file:
     jid_file.write(job_id)
 

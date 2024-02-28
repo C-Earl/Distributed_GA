@@ -54,7 +54,7 @@ class Server_SLURM(Server):
     if call_type == 'run_model':
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
       out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
-      job_id = int(out_string.split()[-1])        # out_string = "Submitted batch job <job-id>"
+      job_id = str(int(out_string.split()[-1]))        # out_string = "Submitted batch job <job-id>"
       save_agent_job_ID(self.run_name, agent_id, job_id)
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
       self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
@@ -68,8 +68,9 @@ class Server_SLURM(Server):
     neighbor_agent_job_id = load_agent_job_ID(self.run_name, neighbor_agent_id)
 
     # Check neighbor still running
-    run_state = subprocess.check_output(f"seff {neighbor_agent_job_id} | grep 'State'")
-    run_state = run_state.split()[1]
+    seff_command = ["seff", neighbor_agent_job_id]
+    completed_process = subprocess.run(seff_command, capture_output=True)
+    run_state = str(completed_process.stdout).split('State: ')[1].split('\\nCores')[0]
     print("DEBUG, current run_state: ", run_state)
     # acceptable_states = ['PENDING', 'RUNNING', 'COMPLETED', 'COMPLETING', "SUSPENDED", "CONFIGURING"]
     crash_states = ['BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
