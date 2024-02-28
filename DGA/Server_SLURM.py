@@ -11,6 +11,7 @@ from DGA.File_IO import write_model_args_to_file, load_model_args_from_file, wri
 from DGA.Algorithm import Genetic_Algorithm_Base as Algorithm
 from DGA.Model import Model
 from DGA.Server import Server
+import time
 
 
 class Server_SLURM(Server):
@@ -53,7 +54,7 @@ class Server_SLURM(Server):
     # Call sbatch script
     if call_type == 'run_model':
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
-      out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
+      out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}".split())
       job_id = str(int(out_string.split()[-1]))        # out_string = "Submitted batch job <job-id>"
       save_agent_job_ID(self.run_name, agent_id, job_id)
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
@@ -67,6 +68,7 @@ class Server_SLURM(Server):
     neighbor_agent_id = (agent_id + 1) % self.num_parallel_processes
     neighbor_agent_job_id = load_agent_job_ID(self.run_name, neighbor_agent_id)
 
+    time.sleep(20)
     # Check neighbor still running
     seff_command = ["seff", neighbor_agent_job_id]
     completed_process = subprocess.run(seff_command, capture_output=True)
