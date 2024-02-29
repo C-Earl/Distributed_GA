@@ -13,7 +13,6 @@ from DGA.Model import Model
 from DGA.Server import Server
 import time
 
-
 class Server_SLURM(Server):
   def __init__(self, run_name: str, algorithm: Algorithm | type, model: Model | type,
                num_parallel_processes: int, sbatch_script: str, callback_sbatch_script: str = None, call_type: str = 'init',
@@ -72,7 +71,7 @@ class Server_SLURM(Server):
     # Check neighbor still running
     seff_command = ["seff", neighbor_agent_job_id]
     completed_process = subprocess.run(seff_command, capture_output=True)
-    run_state = str(completed_process.stdout).split('State: ')[1].split('\\nCores')[0]
+    run_state = str(completed_process.stdout).split('State: ')[1].split('\\nNodes')[0]
     print("DEBUG, current run_state: ", run_state)
     # acceptable_states = ['PENDING', 'RUNNING', 'COMPLETED', 'COMPLETING', "SUSPENDED", "CONFIGURING"]
     crash_states = ['BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
