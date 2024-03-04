@@ -74,7 +74,7 @@ class Server_SLURM(Server):
     run_state = str(completed_process.stdout).split('State: ')[1].split('\\nNodes')[0]
     print("DEBUG, current run_state: ", run_state)
     # acceptable_states = ['PENDING', 'RUNNING', 'COMPLETED', 'COMPLETING', "SUSPENDED", "CONFIGURING"]
-    crash_states = ['BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
+    crash_states = ['BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT', "PREEMPTED (exit code 0)"]
     if run_state in crash_states:
       # Find neighbors assigned params
       neighbor_args = load_model_args_from_file(neighbor_agent_id, self.run_name)
