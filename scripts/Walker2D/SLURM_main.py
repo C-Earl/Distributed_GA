@@ -13,17 +13,17 @@ if __name__ == '__main__':
                        min_val=0.01, max_val=3,
                        mutate_rate=0.2, mutate_scale=0.02), 'expl_noise')
   genome.add_gene(Gene(dtype=float,
-                       min_val=0.9, max_val=0.999,
-                       mutate_rate=0.2, mutate_scale=0.005), 'discount')
+                       min_val=0.8, max_val=0.999,
+                       mutate_rate=0.2, mutate_scale=0.05), 'discount')
   genome.add_gene(Gene(dtype=float,
-                       min_val=0.0010, max_val=0.0100,
-                       mutate_rate=0.2, mutate_scale=0.0002), 'tau')
+                       min_val=0.0010, max_val=0.1000,
+                       mutate_rate=0.2, mutate_scale=0.002), 'tau')
   genome.add_gene(Gene(dtype=float,
                        min_val=0.05, max_val=0.5,
                        mutate_rate=0.2, mutate_scale=0.02), 'policy_noise')
   genome.add_gene(Gene(dtype=float,
                        min_val=0.1, max_val=1.0,
-                       mutate_rate=0.2, mutate_scale=0.02), 'noise_clip')
+                       mutate_rate=0.2, mutate_scale=0.1), 'noise_clip')
 
   mod = Walker_Model()
   alg = Genetic_Algorithm(genome=genome, num_params=10, iterations=20_000)

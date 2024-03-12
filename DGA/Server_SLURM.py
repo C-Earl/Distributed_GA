@@ -56,7 +56,6 @@ class Server_SLURM(Server):
       out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
       job_id = str(int(out_string.split()[-1]))        # out_string = "Submitted batch job <job-id>"
       save_agent_job_ID(self.run_name, agent_id, job_id)
-      logging.debug(f"Submitted job {job_id} for agent {agent_id}")
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
       self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
 
