@@ -26,7 +26,7 @@ if __name__ == '__main__':
                        mutate_rate=0.2, mutate_scale=0.1), 'noise_clip')
 
   mod = Walker_Model()
-  alg = Genetic_Algorithm(genome=genome, num_params=10, iterations=20_000)
+  alg = Genetic_Algorithm(genome=genome, pool_size=10, iterations=20_000)
   server = Server_SLURM(run_name="Walker_2D_run", algorithm=alg, model=mod,
                         num_parallel_processes=10, sbatch_script="sbatch_script.sh")
 

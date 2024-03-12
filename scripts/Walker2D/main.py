@@ -30,7 +30,7 @@ if __name__ == '__main__':
                        mutate_rate=0.2, mutate_scale=0.02), 'noise_clip')
 
   mod = Walker_Model()
-  alg = Genetic_Algorithm(genome=genome, num_params=10, iterations=1_000)
+  alg = Genetic_Algorithm(genome=genome, pool_size=10, iterations=1_000)
   sync_runner = Synchronized(run_name="Walker_2D_run", algorithm=alg, model=mod, log_freq=1)
   sync_runner.run()
 
