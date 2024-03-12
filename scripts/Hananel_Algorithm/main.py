@@ -19,7 +19,7 @@ if __name__ == '__main__':
   genome.add_gene(gene, 'vector_gene')
 
   mod = Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
-  alg = Hananel_Algorithm(genome=genome, num_params=10, iterations_per_epoch=1_000, epochs=2, plateau_warmup=100, mutation_rate=0.9)
+  alg = Hananel_Algorithm(genome=genome, pool_size=10, iterations_per_epoch=1_000, epochs=2, plateau_warmup=100, mutation_rate=0.9)
   # parallel_runner = Server(run_name="Hananel_Alg", algorithm=alg, model=mod, num_parallel_processes=10)
   sync_runner = Synchronized(run_name="Hananel_Alg", algorithm=alg, model=mod)
   sync_runner.run()

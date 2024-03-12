@@ -47,14 +47,14 @@ class Genetic_Algorithm_Base:
   # - Loads pool from files
   # - Undefined vars are set to -1 so they won't be saved to files (issues with inheritence & loading args)
   def __init__(self,
-               num_params: int = -1,  # Number of Parameters in pool
+               pool_size: int = -1,  # Number of Parameters in pool
                iterations: int = -1,  # Number of iterations to run
                genome: Genome = None,  # Genome to use for creating new Parameters
                **kwargs) -> None:
 
     # Algorithm specific vars. Only turned to class vars if defined by user
-    if num_params != -1:
-      self.num_params = num_params
+    if pool_size != -1:
+      self.pool_size = pool_size
     if iterations != -1:
       self.iterations = iterations
     if genome is not None:
@@ -62,7 +62,7 @@ class Genetic_Algorithm_Base:
     self.current_iter = kwargs.pop('current_iter', 0)  # Not an argument that needs to be set by user
 
     # Check if run from user script or server
-    # Note: When users start a run, they must pass a GA object with num_params & iterations
+    # Note: When users start a run, they must pass a GA object with pool_size & iterations
     # into the Server obj. This is for syntax simplicity, but we can't load any run files because they don't
     # exist yet. Just return instead
     if 'run_name' not in kwargs.keys():
@@ -86,13 +86,23 @@ class Genetic_Algorithm_Base:
       self.history = None
 
     # Initialize logging vars
-    # NOT CURRENTLY USED
     self.log_vars = ['timestamp', 'fitness', 'iteration']
     self.log_vars.extend(additional_log_vars)
 
   # Test condition for valid_parents subpool
   def tested_condition(self, key, params):
     return params.tested()
+
+  # Initialize pool
+  # Inputs: num_params (int) - Number of Parameters to initialize (CAN be more than pool_size)
+  # Outputs: copy of newly initialized pool
+  def initialize_pool(self, num_params: int):
+    for i in range(num_params):
+      new_params = self.spawn(self.current_iter)
+      params_name = get_pool_key(new_params)
+      self.pool[params_name] = new_params
+    return self.pool.copy()
+
 
   # Load pool from files
   # Inputs: async_ (bool) - If True, load files assuming multiple processes are writing to pool files
@@ -162,12 +172,12 @@ class Genetic_Algorithm_Base:
 class Genetic_Algorithm(Genetic_Algorithm_Base):
 
   def __init__(self,
-               num_params: int,
+               pool_size: int,
                iterations: int,
                genome: Genome,
                num_parents: int = 2,
                **kwargs) -> None:
-    super().__init__(num_params, iterations, genome, **kwargs)
+    super().__init__(pool_size, iterations, genome, **kwargs)
     self.num_parents = num_parents
 
   # Fetch a new Parameters from pool for testing.
@@ -177,14 +187,14 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
     self.current_iter += 1  # Increment iteration
 
     # If pool is uninitialized, initialize new Parameters
-    if len(self.pool.items()) < self.num_params:
-      new_params = self.spawn(self.current_iter)
-      params_name = get_pool_key(new_params)
-      self.pool[params_name] = new_params
-      return params_name, True
+    # if len(self.pool.items()) < self.pool_size:
+    #   new_params = self.spawn(self.current_iter)
+    #   params_name = get_pool_key(new_params)
+    #   self.pool[params_name] = new_params
+    #   return params_name, True
 
     # If there aren't at least 2 genes in pool, can't create new gene
-    elif len(self.valid_parents.items()) < 2:
+    if len(self.valid_parents.items()) < 2:
       self.current_iter -= 1  # No gene created, so don't increment (cancels out prior += 1)
       return None, False
 
@@ -222,8 +232,8 @@ class Genetic_Algorithm(Genetic_Algorithm_Base):
   # Inputs: None
   # Outputs: None
   def trim_pool(self) -> None:
-    if len(self.valid_parents) > self.num_params:
-      num_to_remove = len(self.valid_parents) - self.num_params
+    if len(self.valid_parents) > self.pool_size:
+      num_to_remove = len(self.valid_parents) - self.pool_size
       sorted_params = self.sort_params(self.valid_parents)
       for i in range(num_to_remove):
         param_name = sorted_params[-(i+1)][0]
@@ -288,7 +298,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
   def __init__(self,
                # Genetic Algorithm Parameters
                genome: Genome,  # Genome to use for creating new Parameters
-               num_params: int,  # Number of Parameters in pool
+               pool_size: int,  # Number of Parameters in pool
 
                # Hananel Algorithm Parameters
                iterations_per_epoch: int,  # Number of iterations per epoch
@@ -303,7 +313,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
                **kwargs):
     # Don't use default 'self.iterations', set -1
     # History is required for plateau detection
-    super().__init__(num_params, -1, genome, num_parents,
+    super().__init__(pool_size, -1, genome, num_parents,
                      history=True, log_vars=['proximity_penalty'], **kwargs)
 
     self.diversity_threshold = diversity_threshold
@@ -320,8 +330,8 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.founders_pool = {}  # Pool of top scoring Parameters from previous epochs
 
     self.diversity_history = []  # History of diversity scores
-    self.diversity_matrix = np.zeros((self.num_params, self.num_params))  # Distance between all params
-    self.agent_iterations = np.zeros(self.num_params, dtype=int)  # Iterations per agent (per epoch)
+    self.diversity_matrix = np.zeros((self.pool_size, self.pool_size))  # Distance between all params
+    self.agent_iterations = np.zeros(self.pool_size, dtype=int)  # Iterations per agent (per epoch)
 
   # Fetch a new Parameters from pool for testing.
   # Inputs: None
@@ -333,7 +343,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     self.agent_iterations[agent_id] += 1
 
     # If pool initialized, start calculating diversity matrix
-    if not (len(self.pool.items()) < self.num_params):
+    if not (len(self.pool.items()) < self.pool_size):
       matrix_pool = np.vstack([params.as_array() for params in self.valid_parents.values()])
       self.diversity_matrix = distance.cdist(matrix_pool, matrix_pool, self.diversity_method)
       # Why "- self.diversity_matrix.shape[0]" ?
@@ -356,7 +366,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
 
     # TODO: Make so server handles first two if cases
     # If pool is uninitialized, initialize new Parameters
-    if len(self.pool.items()) < self.num_params:
+    if len(self.pool.items()) < self.pool_size:
       new_params = self.spawn(self.total_iter)
       params_name = str(hash(new_params))
       new_params.set_attribute('agent_id', agent_id)
@@ -411,7 +421,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
   def start_new_epoch(self, **kwargs):
     self.current_epoch += 1
     self.epoch_iter = 0
-    self.agent_iterations = np.zeros(self.num_params, dtype=int)  # Reset agent iterations
+    self.agent_iterations = np.zeros(self.pool_size, dtype=int)  # Reset agent iterations
 
     # Move top scoring params to founders pool
     sorted_params = self.sort_params(self.valid_parents)
@@ -452,8 +462,8 @@ class Hananel_Algorithm(Genetic_Algorithm):
   # Outputs: None
   def trim_pool(self) -> None:
     # Handle for when async causes overpopulation
-    if len(self.valid_parents) > self.num_params:
-      num_to_remove = len(self.valid_parents) - self.num_params
+    if len(self.valid_parents) > self.pool_size:
+      num_to_remove = len(self.valid_parents) - self.pool_size
       sorted_params = self.sort_params(self.valid_parents)
       for i in range(num_to_remove):
         param_name = sorted_params[-(i + 1)][0]
@@ -479,7 +489,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     # Get (normalized to [0, 1]) diversity scores
     if self.diversity_matrix.max() == self.diversity_matrix.min():
       # Avoid divide by zero. Logically, all diversity scores are equal in this case
-      normalized_dmat = np.zeros(self.num_params)
+      normalized_dmat = np.zeros(self.pool_size)
     else:
       normalized_dmat = (self.diversity_matrix - self.diversity_matrix.min()) / (
               self.diversity_matrix.max() - self.diversity_matrix.min())
@@ -494,7 +504,7 @@ class Hananel_Algorithm(Genetic_Algorithm):
     probabilities = normed_fitness + param_diversities  # Normalize to [0, 1]
     # If all probabilities are 0 or contain NaN, set to uniform
     if probabilities.sum() == 0 or (np.isnan(probabilities)).any():
-      probabilities = np.ones(self.num_params) / self.num_params
+      probabilities = np.ones(self.pool_size) / self.pool_size
     else:
       probabilities /= np.sum(normed_fitness + param_diversities)
 

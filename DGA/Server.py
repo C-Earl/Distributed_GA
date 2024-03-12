@@ -98,9 +98,12 @@ class Server:
     # Generate initial params
     alg = algorithm_type(run_name=self.run_name, **algorithm_args)
     original_pool = copy.deepcopy(alg.pool)
-    init_params = []
-    for i in range(self.num_parallel_processes):
-      init_params.append(alg.fetch_params(agent_id=i)[0])  # Don't need status on init, just params
+    init_params = alg.initialize_pool(self.num_parallel_processes)
+    # for i in range(self.num_parallel_processes):
+      # init_params.append(alg.fetch_params(agent_id=i)[0])  # Don't need status on init, just params
+      # init_param = alg.spawn(iteration=0)
+      # init_param_name =
+      # init_params.append()
 
     # Update pool files (Parameter files)
     final_pool = alg.pool
@@ -111,7 +114,7 @@ class Server:
     save_model(self.run_name, model)
 
     # Call models to run initial params
-    for i, p_name in enumerate(init_params):
+    for i, p_name in enumerate(init_params.keys()):
       self.make_call(i, p_name, "run_model", **kwargs)
 
   # Run model with given params

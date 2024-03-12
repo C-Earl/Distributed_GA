@@ -56,6 +56,7 @@ class Server_SLURM(Server):
       out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
       job_id = str(int(out_string.split()[-1]))        # out_string = "Submitted batch job <job-id>"
       save_agent_job_ID(self.run_name, agent_id, job_id)
+      logging.debug(f"Submitted job {job_id} for agent {agent_id}")
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
       self.server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
 
@@ -70,18 +71,44 @@ class Server_SLURM(Server):
     # Check neighbor still running
     seff_command = ["seff", neighbor_agent_job_id]
     completed_process = subprocess.run(seff_command, capture_output=True)
-    run_state = str(completed_process.stdout).split('State: ')[1].split('\\nCores')[0]
-    print("DEBUG, current run_state: ", run_state)
+    run_state = str(completed_process.stdout).split('State: ')[1].split('\\nNodes')[0]
     # acceptable_states = ['PENDING', 'RUNNING', 'COMPLETED', 'COMPLETING', "SUSPENDED", "CONFIGURING"]
-    crash_states = ['BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
+    crash_states = ['', 'BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
+    # agent_job_file_exists = os.path.exists(file_path(self.run_name, RUN_INFO_DIR, JOB_ID_DIR, f"AGENT_{neighbor_agent_id}_job_id"))
+
+    print(f"DEBUG: {run_state=}, {neighbor_agent_job_id=}, {agent_id=}")
+
+    # Cases:
+    # 1) If seff says crashed, then it crashed
+    # 2) If seff says it's completed, but agent_job_id file is not deleted, then it crashed
+
+    # If seff says crashed
+    restart_agent = False
     if run_state in crash_states:
+      restart_agent = True
+
+    # If seff says completed, but agent_job_id file wasn't deleted
+    elif run_state == 'COMPLETED (exit code 0)':
+      restart_agent = True
+
+    # If node was preempted by SLURM
+    elif run_state == 'PREEMPTED (exit code 0)':
+      restart_agent = True
+
+    if restart_agent:
+      logging.debug(f"Agent {neighbor_agent_id} crashed on job {neighbor_agent_job_id}. Restarting...")
+
       # Find neighbors assigned params
       neighbor_args = load_model_args_from_file(neighbor_agent_id, self.run_name)
       neighbor_params_name = neighbor_args['params_name']
       self.make_call(neighbor_agent_id, neighbor_params_name, 'run_model', **kwargs)
+    else:
+      logging.debug(f"Agent {neighbor_agent_id} is still running on job {neighbor_agent_job_id}. Proceeding...")
+
 
     # Proceed with normal callback
     super().server_callback(**kwargs, agent_id=agent_id, params_name=params_name)
+
 
 # Main function catches server-callbacks & runs models
 if __name__ == '__main__':

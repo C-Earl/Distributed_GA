@@ -12,5 +12,5 @@ if __name__ == '__main__':
   genome.add_gene(gene, 'vector_gene')
 
   mod = Model(genome=genome, vector_size=VECTOR_SHAPE, vector_distribution=10, vector_scale=3)
-  alg = Algorithm(num_params=10, iterations=1_000, genome=genome, num_parents=2)
-  sync_runner = Server(run_name="Vect-Est (parallel)", algorithm=alg, model=mod, num_parallel_processes=10)
+  alg = Algorithm(pool_size=10, iterations=1_000, genome=genome, num_parents=2)
+  sync_runner = Server(run_name="Vect-Est (parallel)", algorithm=alg, model=mod, num_parallel_processes=50)
