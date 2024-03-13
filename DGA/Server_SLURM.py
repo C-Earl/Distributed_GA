@@ -53,7 +53,9 @@ class Server_SLURM(Server):
     # Call sbatch script
     if call_type == 'run_model':
       server_path_ = os.path.abspath(__file__)  # Get absolute path to current location on machine
-      out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}")
+      # out_string = subprocess.check_output(f"ls")
+      # print(out)
+      out_string = subprocess.check_output(f"sbatch {self.sbatch_script} {agent_id} {self.run_name} {server_path_}", shell=True)
       job_id = str(int(out_string.split()[-1]))        # out_string = "Submitted batch job <job-id>"
       save_agent_job_ID(self.run_name, agent_id, job_id)
     elif call_type == 'server_callback':     # If true, means already on node, no need to make new node
