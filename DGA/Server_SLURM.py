@@ -93,6 +93,10 @@ class Server_SLURM(Server):
       restart_agent = True
 
     # If node was preempted by SLURM
+    elif run_state == 'CANCELED (exit code 0)':
+      restart_agent = True
+
+    # If node was preempted by SLURM
     elif run_state == 'PREEMPTED (exit code 0)':
       restart_agent = True
 
