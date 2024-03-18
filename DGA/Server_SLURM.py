@@ -1,3 +1,4 @@
+import re
 import logging
 import os.path
 import subprocess
@@ -73,15 +74,10 @@ class Server_SLURM(Server):
     seff_command = ["seff", neighbor_agent_job_id]
     completed_process = subprocess.run(seff_command, capture_output=True)
     run_state = str(completed_process.stdout).split('State: ')[1].split('\\nNodes')[0]
-    # acceptable_states = ['PENDING', 'RUNNING', 'COMPLETED', 'COMPLETING', "SUSPENDED", "CONFIGURING"]
+    run_state = re.search(r'[A-Z]*', run_state).group() # Remove exit code)
     crash_states = ['', 'BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
-    # agent_job_file_exists = os.path.exists(file_path(self.run_name, RUN_INFO_DIR, JOB_ID_DIR, f"AGENT_{neighbor_agent_id}_job_id"))
 
     print(f"DEBUG: {run_state=}, {neighbor_agent_job_id=}, {agent_id=}")
-
-    # Cases:
-    # 1) If seff says crashed, then it crashed
-    # 2) If seff says it's completed, but agent_job_id file is not deleted, then it crashed
 
     # If seff says crashed
     restart_agent = False
@@ -89,15 +85,15 @@ class Server_SLURM(Server):
       restart_agent = True
 
     # If seff says completed, but agent_job_id file wasn't deleted
-    elif run_state == 'COMPLETED (exit code 0)':
+    elif run_state == 'COMPLETED':
+      restart_agent = True
+
+    # If node was cancelled by SLURM
+    elif run_state == 'CANCELLED':
       restart_agent = True
 
     # If node was preempted by SLURM
-    elif run_state == 'CANCELED (exit code 0)':
-      restart_agent = True
-
-    # If node was preempted by SLURM
-    elif run_state == 'PREEMPTED (exit code 0)':
+    elif run_state == 'PREEMPTED':
       restart_agent = True
 
     if restart_agent:
