@@ -74,7 +74,7 @@ class Server_SLURM(Server):
     seff_command = ["seff", neighbor_agent_job_id]
     completed_process = subprocess.run(seff_command, capture_output=True)
     run_state = str(completed_process.stdout).split('State: ')[1].split('\\nNodes')[0]
-    run_state = re.search(r'[A-Z]*', run_state).group() # Remove exit code)
+    # run_state = re.search(r'[A-Z]*', run_state).group() # Remove exit code)
     crash_states = ['', 'BOOT_FAIL', 'DEADLINE', 'FAILED', 'NODE_FAIL', 'OUT_OF_MEMORY', 'TIMEOUT']
 
     print(f"DEBUG: {run_state=}, {neighbor_agent_job_id=}, {agent_id=}")
@@ -85,15 +85,15 @@ class Server_SLURM(Server):
       restart_agent = True
 
     # If seff says completed, but agent_job_id file wasn't deleted
-    elif run_state == 'COMPLETED':
+    elif run_state == 'COMPLETED (exit code 0)':
       restart_agent = True
 
     # If node was cancelled by SLURM
-    elif run_state == 'CANCELLED':
+    elif run_state == 'CANCELLED (exit code 0)':
       restart_agent = True
 
     # If node was preempted by SLURM
-    elif run_state == 'PREEMPTED':
+    elif run_state == 'PREEMPTED (exit code 0)':
       restart_agent = True
 
     if restart_agent:
