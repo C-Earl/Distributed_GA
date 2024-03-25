@@ -10,16 +10,16 @@ if __name__ == '__main__':
   # Genome
   genome = Genome()
   genome.add_gene(Gene(dtype=float,
-                       min_val=0.01, max_val=3,
+                       min_val=0.01, max_val=5,
                        mutate_rate=0.2, mutate_scale=0.02), 'expl_noise')
   genome.add_gene(Gene(dtype=float,
-                       min_val=0.8, max_val=0.999,
+                       min_val=0.1, max_val=0.999,
                        mutate_rate=0.2, mutate_scale=0.05), 'discount')
   genome.add_gene(Gene(dtype=float,
-                       min_val=0.0010, max_val=0.1000,
+                       min_val=0.0010, max_val=0.3000,
                        mutate_rate=0.2, mutate_scale=0.002), 'tau')
   genome.add_gene(Gene(dtype=float,
-                       min_val=0.05, max_val=0.5,
+                       min_val=0.01, max_val=0.99,
                        mutate_rate=0.2, mutate_scale=0.02), 'policy_noise')
   genome.add_gene(Gene(dtype=float,
                        min_val=0.1, max_val=1.0,
