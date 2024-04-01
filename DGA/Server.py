@@ -124,6 +124,11 @@ class Server:
     params = load_params_file_async(self.run_name, params_name)  # All params info (inc. fitness, etc.)
     model = load_model(self.run_name)
 
+    # If params is none, then params file is irretrievable. Generate new params for this agent
+    if params is None:
+      self.make_call(call_type="server_callback", **kwargs)
+      return
+
     # Load data
     model.load_data()
 
@@ -135,7 +140,6 @@ class Server:
     params.set_fitness(fitness)
     params.set_tested(True)
     pool_lock_path = file_path(self.run_name, POOL_LOCK_NAME)
-    # with portalocker.Lock(pool_lock_path, timeout=10) as _:
     write_params_file(self.run_name, params_name, params)
     write_log(self.run_name, kwargs['agent_id'], model.logger(params))
 

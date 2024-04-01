@@ -121,10 +121,12 @@ def load_params_file_async(run_name: str, params_name: str,):
 
     # File removed by other agent, return None (no params)
     except FileNotFoundError:
+      logging.warning(f"Error, couldn't find params file {params_name}")
       return None
     
     # File removed in NFS, return None (no params)
     except OSError:
+      logging.warning(f"OS Error, when loading params file {params_name}")
       return None
 
 
