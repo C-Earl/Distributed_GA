@@ -47,6 +47,23 @@ class Synchronized:
     if self.algorithm.history is not None:
       self.algorithm.history[0] = []
 
+    # Initialize pool
+    init_params = self.algorithm.initialize_pool(self.algorithm.pool_size)
+    for gene_name, gene in init_params.items():
+      fitness = self.model.run(self.pool[gene_name])
+      self.pool[gene_name].set_fitness(fitness)
+      self.algorithm.valid_parents[gene_name] = self.pool[gene_name]
+
+      # Log & update history
+      self.log.append(self.model.logger(self.pool[gene_name]))
+      if self.algorithm.history is not None:
+        self.algorithm.history[0].append(self.log[-1])
+
+      # Log to file
+      if self.iteration % self.log_freq == 0 and self.log_freq > 0:
+        write_logs(self.run_name, 0, self.log)
+        self.log = []
+
     # Loop until end condition met
     while not self.algorithm.end_condition():
       self.iteration += 1
